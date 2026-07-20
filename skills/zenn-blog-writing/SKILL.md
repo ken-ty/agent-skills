@@ -1,5 +1,5 @@
 ---
-name: Zenn技術ブログ執筆スキル
+name: zenn-blog-writing
 description: Zennの技術ブログ記事を執筆・レビューする際のガイドライン。技術的な正確性、読みやすさ、AIっぽい文章の排除を重視します。
 ---
 
