@@ -26,6 +26,12 @@ import {
 
 let problems = 0;
 
+/** True when `p` is `dir` itself or sits beneath it. */
+const isInside = (p: string, dir: string): boolean => {
+  const rel = path.relative(path.resolve(dir), p);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+};
+
 /** A skill is only discoverable by agents if it has a SKILL.md at its root. */
 const hasSkillMd = (name: string): boolean =>
   fs.existsSync(path.join(REPO_SKILLS, name, "SKILL.md"));
@@ -224,7 +230,9 @@ function checkFanOut(expected: string[]): void {
         continue;
       }
       const real = fs.realpathSync(p);
-      if (real.startsWith(path.resolve(REPO_SKILLS))) {
+      // Compare on a path boundary: a bare prefix test would also accept a
+      // sibling like <repo>/skills-old/, which is not this store.
+      if (isInside(real, REPO_SKILLS)) {
         ok(`${agent}: ${e.name} -> this repo`);
       } else if (e.isSymbolicLink()) {
         bad(`${agent}: ${e.name} -> ${tilde(real)} (outside this repo — migrate it into ${tilde(REPO_SKILLS)})`);
