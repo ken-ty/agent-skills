@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "skills": {
+    "create-notion-db": {
+      "kind": "own",
+      "author": "ken-ty",
+      "refs": [],
+      "addedAt": "2026-07-20"
+    },
+    "find-skills": {
+      "kind": "remote",
+      "author": "vercel-labs",
+      "refs": ["https://github.com/vercel-labs/skills"],
+      "addedAt": "2026-03-02"
+    },
+    "freee-api-skill": {
+      "kind": "remote",
+      "author": "freee",
+      "refs": ["https://github.com/freee/freee-mcp"],
+      "addedAt": "2026-03-24"
+    },
+    "zenn-blog-writing": {
+      "kind": "vendored",
+      "author": "redamoon",
+      "origin": "Zenn 記事「Zennブログ執筆用のAgent Skillを自作して運用してみた」本文の「SKILL.mdの全文」コードブロックからコピー。リポジトリでの配布は無く npx skills add では取得できない",
+      "refs": ["https://zenn.dev/redamoon/articles/article40-zenn-blog-writing"],
+      "note": "上流のまま未改変。frontmatter の name が日本語で kebab-case 規約外。textlint / npm run preview を前提とした記述を含むので、それらが無いプロジェクトでは一部読み替えが要る",
+      "addedAt": "2026-07-20"
+    }
+  }
+}

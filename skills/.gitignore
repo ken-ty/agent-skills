@@ -1,0 +1,5 @@
+# --- managed by scripts/sync.ts (do not edit) ---
+# 3rd-party skills: tracked in ../skills.lock, restored by `npm run sync`.
+/find-skills/
+/freee-api-skill/
+# --- end managed ---

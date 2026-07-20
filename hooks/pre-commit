@@ -1,0 +1,12 @@
+#!/bin/sh
+#
+# Block commits that carry secrets or machine-specific data.
+#
+# Active only where `git config core.hooksPath hooks` has been set — done by
+# `npm run link`, verified by `npm run doctor`. Hooks live here rather than in
+# .git/hooks so that they are version-controlled and reach every clone.
+#
+# `git commit --no-verify` bypasses this. That is git's design, not an
+# oversight: this hook is a backstop against mistakes, not a security boundary.
+set -e
+exec node "$(git rev-parse --show-toplevel)/scripts/run.js" audit
