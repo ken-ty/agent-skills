@@ -26,6 +26,16 @@ import {
 
 let problems = 0;
 
+/** True when `p` is `dir` itself or sits beneath it. */
+const isInside = (p: string, dir: string): boolean => {
+  const rel = path.relative(path.resolve(dir), p);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+};
+
+/** A skill is only discoverable by agents if it has a SKILL.md at its root. */
+const hasSkillMd = (name: string): boolean =>
+  fs.existsSync(path.join(REPO_SKILLS, name, "SKILL.md"));
+
 const ok = (m: string): void => console.log(`  ok    ${m}`);
 const warn = (m: string): void => console.log(`  warn  ${m}`);
 const bad = (m: string): void => {
@@ -139,10 +149,6 @@ function checkSkills(tracked: string[], catalog: Catalog | null): void {
   const trackedSet = new Set(tracked);
   const entries = catalog?.skills ?? {};
 
-  // A skill is only discoverable by agents if it has a SKILL.md at its root.
-  const hasSkillMd = (name: string): boolean =>
-    fs.existsSync(path.join(REPO_SKILLS, name, "SKILL.md"));
-
   for (const name of [...new Set([...Object.keys(entries), ...present])].sort()) {
     const entry = entries[name];
     const inLock = trackedSet.has(name);
@@ -181,8 +187,15 @@ function checkSkills(tracked: string[], catalog: Catalog | null): void {
   console.log("");
 }
 
-/** Per-agent fan-out is written by `npx skills`; we only report on it. */
-function checkFanOut(): void {
+/**
+ * Per-agent fan-out is written by `npx skills`; we only report on it.
+ *
+ * `expected` is every skill that ought to be reachable from a non-universal
+ * agent. Own and vendored skills get their link by hand (see README), so
+ * forgetting one is easy — and the symptom is silence: the skill sits in the
+ * repo, doctor used to pass, and the agent simply never sees it.
+ */
+function checkFanOut(expected: string[]): void {
   console.log("agent fan-out (written by `npx skills`)");
   for (const { agent, dir, universal } of AGENT_SKILL_DIRS) {
     // Universal agents read the canonical store directly, so an empty or
@@ -200,6 +213,16 @@ function checkFanOut(): void {
       warn(`${agent}: ${tilde(dir)} is empty`);
       continue;
     }
+
+    const linked = new Set(entries.map((e) => e.name));
+    for (const name of expected) {
+      if (linked.has(name)) continue;
+      bad(
+        `${agent}: ${name} is in the repo but not in ${tilde(dir)} — ` +
+          `\`ln -s ../../.agents/skills/${name} ${tilde(path.join(dir, name))}\``,
+      );
+    }
+
     for (const e of entries) {
       const p = path.join(dir, e.name);
       if (!fs.existsSync(p)) {
@@ -207,7 +230,9 @@ function checkFanOut(): void {
         continue;
       }
       const real = fs.realpathSync(p);
-      if (real.startsWith(path.resolve(REPO_SKILLS))) {
+      // Compare on a path boundary: a bare prefix test would also accept a
+      // sibling like <repo>/skills-old/, which is not this store.
+      if (isInside(real, REPO_SKILLS)) {
         ok(`${agent}: ${e.name} -> this repo`);
       } else if (e.isSymbolicLink()) {
         bad(`${agent}: ${e.name} -> ${tilde(real)} (outside this repo — migrate it into ${tilde(REPO_SKILLS)})`);
@@ -227,7 +252,9 @@ function main(): void {
   const tracked = checkLock();
   const catalog = checkCatalog();
   checkSkills(tracked, catalog);
-  checkFanOut();
+  // Only loadable skills are expected downstream — one without a SKILL.md is
+  // already reported above, and linking it would not help.
+  checkFanOut(presentSkillNames().filter(hasSkillMd));
 
   if (problems > 0) {
     console.log(`${problems} problem(s) found.`);
