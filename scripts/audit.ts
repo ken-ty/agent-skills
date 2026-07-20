@@ -85,11 +85,18 @@ function git(args: string[]): { ok: boolean; out: string } {
 
 const all = process.argv.includes("--all");
 
+/**
+ * `-z` is not a detail: without it git applies `core.quotePath` and prints a
+ * non-ASCII path as `"skills/\346\227\245..."` — quoted and octal-escaped. That
+ * string does not resolve as a pathspec, so `git show :<file>` fails and the
+ * file drops out of the scan. A skill named in Japanese would then carry a
+ * secret straight past the hook. NUL-separated output is never rewritten.
+ */
 function targets(): string[] {
   const r = all
-    ? git(["ls-files"])
-    : git(["diff", "--cached", "--name-only", "--diff-filter=ACM"]);
-  return r.out.split("\n").filter((l) => l.trim() !== "");
+    ? git(["ls-files", "-z"])
+    : git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z"]);
+  return r.out.split("\0").filter((l) => l !== "");
 }
 
 /** Staged content, not working-tree content — partial staging must be honoured. */
@@ -138,6 +145,7 @@ function main(): void {
 
   const findings: Finding[] = [];
   const forbidden: string[] = [];
+  const unreadable: string[] = [];
 
   for (const file of files) {
     if (FORBIDDEN_PATHS.some((re) => re.test(file))) {
@@ -145,19 +153,30 @@ function main(): void {
       continue;
     }
     const text = contentOf(file);
-    if (text !== null) findings.push(...scan(file, text));
+    // "could not read" is not "no secrets found". Silently skipping would let
+    // the summary below call an unexamined file clean.
+    if (text === null) {
+      unreadable.push(file);
+      continue;
+    }
+    findings.push(...scan(file, text));
   }
 
-  if (forbidden.length === 0 && findings.length === 0) {
+  const problems = forbidden.length + findings.length + unreadable.length;
+  if (problems === 0) {
     console.log(`audit: ${files.length} file(s) clean`);
     return;
   }
 
-  console.error(`audit: BLOCKED — ${forbidden.length + findings.length} problem(s)\n`);
+  console.error(`audit: BLOCKED — ${problems} problem(s)\n`);
 
   for (const file of forbidden) {
     console.error(`  ${file}`);
     console.error("    this kind of file must never be committed\n");
+  }
+  for (const file of unreadable) {
+    console.error(`  ${file}`);
+    console.error("    could not be read — audit cannot clear what it cannot see\n");
   }
   for (const f of findings) {
     console.error(`  ${f.file}:${f.line}  [${f.rule.id}] ${f.rule.why}`);
