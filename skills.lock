@@ -1,0 +1,41 @@
+{
+  "version": 3,
+  "skills": {
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/vercel-labs/skills.git",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "skillFolderHash": "76a98a285cb0434f3d39e1a873823556330e398b",
+      "installedAt": "2026-03-02T15:08:52.658Z",
+      "updatedAt": "2026-07-20T07:44:57.552Z"
+    },
+    "freee-api-skill": {
+      "source": "freee/freee-mcp",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/freee/freee-mcp.git",
+      "skillPath": "skills/freee-api-skill/SKILL.md",
+      "skillFolderHash": "5f533448f2b03900ce074ffee5b541c27ffd844d",
+      "installedAt": "2026-03-24T06:28:03.509Z",
+      "updatedAt": "2026-03-24T06:28:03.509Z"
+    }
+  },
+  "dismissed": {
+    "findSkillsPrompt": true
+  },
+  "lastSelectedAgents": [
+    "amp",
+    "antigravity",
+    "cline",
+    "codex",
+    "cursor",
+    "deepagents",
+    "firebender",
+    "gemini-cli",
+    "github-copilot",
+    "kimi-cli",
+    "opencode",
+    "warp",
+    "claude-code"
+  ]
+}
