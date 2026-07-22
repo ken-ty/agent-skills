@@ -26,6 +26,13 @@
       "refs": ["https://zenn.dev/redamoon/articles/article40-zenn-blog-writing"],
       "note": "上流のまま未改変。frontmatter の name が日本語で kebab-case 規約外。textlint / npm run preview を前提とした記述を含むので、それらが無いプロジェクトでは一部読み替えが要る",
       "addedAt": "2026-07-20"
+    },
+    "course-material": {
+      "kind": "own",
+      "author": "ken-ty",
+      "refs": ["https://github.com/ken-ty/app-dev-course-1"],
+      "note": "app-dev-course-1/week06 パイロットで確定した教材の型を skill 化。週次教材(README/Marp/松竹梅課題/コード)を一括生成する",
+      "addedAt": "2026-07-22"
     }
   }
 }
