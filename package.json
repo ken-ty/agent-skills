@@ -1,0 +1,23 @@
+{
+  "name": "@ken-ty/agent-skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Canonical store for agent skills. Own skills are committed; 3rd-party skills are tracked in skills.lock and materialized by `npx skills`.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "init": "node scripts/run.js init",
+    "link": "node scripts/run.js link",
+    "list": "node scripts/run.js list",
+    "sync": "node scripts/run.js sync",
+    "doctor": "node scripts/run.js doctor",
+    "audit": "node scripts/run.js audit",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.2"
+  }
+}

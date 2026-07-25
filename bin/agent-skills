@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+/**
+ * Global entry point so the repo's commands run from any directory.
+ *
+ * Symlink this into a dir on PATH (e.g. ~/.local/bin/agent-skills). Node resolves
+ * the symlink to this real file, so import.meta.url points back into the repo and
+ * we can always find scripts/run.js — no matter where it was invoked from.
+ *
+ * It only locates and spawns run.js; run.js keeps the single source of truth for
+ * the Node version guard and subcommand dispatch, so behaviour matches `npm run`.
+ */
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const runJs = path.join(here, "..", "scripts", "run.js");
+
+const r = spawnSync(process.execPath, [runJs, ...process.argv.slice(2)], { stdio: "inherit" });
+process.exit(r.status ?? 1);
