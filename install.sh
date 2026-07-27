@@ -18,15 +18,30 @@ if [ ! -f "$SRC" ]; then
   exit 1
 fi
 
-# Node version gate (same floor as scripts/run.js). Only a warning here — the
+# Node version gate (same floor as scripts/run.js). Only ever a warning — the
 # command itself re-checks and prints the full fix.
+#
+# Everything here has to survive a node that is on PATH but cannot run: a
+# version manager with no version selected prints its own error and exits
+# non-zero, and under `set -e` that would kill the install before a single
+# symlink got made — leaving the user with an asdf/nvm message and no hint that
+# this tool wanted Node >= 22.18. Probing must not be fatal.
 if command -v node >/dev/null 2>&1; then
-  NODE_V=$(node -p 'process.versions.node')
-  MAJOR=$(printf '%s' "$NODE_V" | cut -d. -f1)
-  MINOR=$(printf '%s' "$NODE_V" | cut -d. -f2)
-  if [ "$MAJOR" -lt 22 ] || { [ "$MAJOR" -eq 22 ] && [ "$MINOR" -lt 18 ]; }; then
-    echo "install: warning — Node $NODE_V < 22.18; the command needs >= 22.18 to run." >&2
-  fi
+  NODE_V=$(node -p 'process.versions.node' 2>/dev/null || true)
+  case "$NODE_V" in
+    [0-9]*.[0-9]*)
+      MAJOR=${NODE_V%%.*}
+      NODE_REST=${NODE_V#*.}
+      MINOR=${NODE_REST%%.*}
+      if [ "$MAJOR" -lt 22 ] || { [ "$MAJOR" -eq 22 ] && [ "$MINOR" -lt 18 ]; }; then
+        echo "install: warning — Node $NODE_V < 22.18; the command needs >= 22.18 to run." >&2
+      fi
+      ;;
+    *)
+      echo "install: warning — node is on PATH but would not report a version." >&2
+      echo "  (a version manager with nothing selected does this). Needs Node >= 22.18." >&2
+      ;;
+  esac
 else
   echo "install: warning — node not found on PATH; install Node >= 22.18." >&2
 fi
