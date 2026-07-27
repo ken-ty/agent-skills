@@ -124,6 +124,15 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
 `devDependencies` の TypeScript は `npm run typecheck` 専用（型ストリップは型検査をしないため。
 これだけは `npm install` が要る）。
 
+## 対応待ちは issue にある
+
+**判断や作業が保留になっているものは、すべて [issues](https://github.com/ken-ty/agent-skills/issues)
+に上げる。** 会話やメモに残さない。人間は issue を見て判断する。
+
+エージェントもこの運用に従うこと — 実装の途中で「これは人が決めるべき」と判断したものは、
+その場で聞いて止まるのではなく `gh issue create` で残してから先に進める。issue には
+**状況・人間の判断が要ること・完了条件**を書く。
+
 ## トラブルシューティング
 
 `agent-skills doctor` がまず答えを出す。よくあるもの:
