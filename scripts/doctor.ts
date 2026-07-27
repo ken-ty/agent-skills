@@ -208,7 +208,10 @@ function checkSkills(tracked: string[], catalog: Catalog | null): void {
     } else if (!hasSkillMd(name)) {
       warn(`${label} has no SKILL.md — agents will ignore it`);
     } else if (entry === undefined) {
-      warn(`${label} not in catalog.json — author / refs unrecorded`);
+      // The catalog is the record of where a skill came from and how it gets
+      // updated. A body with no entry has neither, so the store is no longer a
+      // single source of truth about itself — that is a failure, not a note.
+      bad(`${label} not in catalog.json — record its kind / author / refs there`);
     } else {
       ok(label);
     }
