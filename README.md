@@ -67,9 +67,27 @@ store を canonical に置き、そこから各系統へ配るのがこのツー
 
 | 系統 | 読むところ | store からの反映 |
 | --- | --- | --- |
-| ローカル FS (`~/.claude/skills`) | Claude Code CLI | **自動** — `agent-skills link` が張る symlink |
+| ローカル FS (`~/.claude/skills`) | **ローカルで動く** Claude Code — CLI / デスクトップ / VS Code / JetBrains | **自動** — `agent-skills link` が張る symlink |
 | API ワークスペース | Messages API | **自動** — `agent-skills push` |
 | claude.ai 個人スキル | claude.ai Web / Desktop | **手動のみ** — API が存在しない |
+| （届かない） | **クラウドセッション** — claude.ai/code / Cowork / routines | **届かない** — 下記参照 |
+
+### クラウドセッションには symlink が届かない
+
+Web / Cowork / routines は Anthropic 側のマシンで動くので、**このマシンの `~/.claude/skills` を
+読まない**（[公式明記](https://code.claude.com/docs/en/skills#skills-in-cowork-and-cloud-sessions)）。
+どれだけ綺麗に symlink を張っても不可視。そこへ届けたいなら経路は 2 つ:
+
+- そのリポジトリの `.claude/skills` にコミットする（プロジェクト単位）
+- **プラグインとして配る** — `.claude/settings.json` の `enabledPlugins` で宣言する
+  （[plugins](https://code.claude.com/docs/en/plugins) / [marketplace](https://code.claude.com/docs/en/plugin-marketplaces)）
+
+### 同名は personal が project に勝つ
+
+優先順位は **enterprise > personal (`~/.claude`) > project (`.claude`) > plugin > bundled**
+（[出典](https://code.claude.com/docs/en/skills#where-skills-live)）。
+つまり global store に同名スキルがあると、**プロジェクト固有として置いたスキルが黙って負ける**。
+プラグインだけは `plugin-name:skill-name` の名前空間を持つので衝突しない。
 
 ### claude.ai (Web / Desktop) は手動アップロード
 

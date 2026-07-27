@@ -284,13 +284,17 @@ function checkFanOut(expected: string[]): void {
  */
 function checkSurfaces(): void {
   console.log("surfaces (skills do NOT sync between these)");
-  ok("local fs: ~/.claude/skills -> the store (checked above)");
+  ok("local Claude Code (cli / desktop / ide): ~/.claude/skills -> the store (checked above)");
   if (process.env.ANTHROPIC_API_KEY !== undefined && process.env.ANTHROPIC_API_KEY.trim() !== "") {
     ok("api workspace: ANTHROPIC_API_KEY set — `agent-skills push` can upload");
   } else {
     // Not a failure: plenty of setups never touch the API surface.
     warn("api workspace: ANTHROPIC_API_KEY unset — `agent-skills push` cannot upload");
   }
+  // Cloud sessions run on Anthropic's machines, so the store on this one is
+  // invisible to them however well it is linked:
+  // https://code.claude.com/docs/en/skills#skills-in-cowork-and-cloud-sessions
+  warn("cloud sessions (web / cowork / routines): never read ~/.claude/skills — commit to a repo's .claude/skills, or ship a plugin");
   warn("claude.ai: manual only — no API exists; upload from the web UI by hand");
   console.log("");
 }
