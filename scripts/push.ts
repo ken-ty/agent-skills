@@ -41,6 +41,30 @@ const dryRun = argv.includes("--dry-run") || argv.includes("-n");
 const includeRemote = argv.includes("--include-remote");
 const wanted = argv.filter((a) => !a.startsWith("-"));
 
+/**
+ * Handled before anything else: unrecognised flags are otherwise dropped by the
+ * filter above, so `push --help` would fall through to a real upload of every
+ * skill. Asking for help must never send anything.
+ */
+if (argv.includes("--help") || argv.includes("-h")) {
+  console.log(`usage: agent-skills push [name...] [--dry-run] [--include-remote]
+
+Uploads store skills to the Anthropic Skills API (the workspace surface).
+With no names, pushes the git-backed skills: catalog kind \`own\` and \`vendored\`.
+
+  name...            push only these skills
+  --dry-run, -n      show what would be sent; makes no request
+  --include-remote   also push kind \`remote\` (skipped by default — upstream publishes those)
+
+Requires ANTHROPIC_API_KEY. Everything except the request itself — selection,
+validation, secret scanning — runs without one, so --dry-run works before you
+have a key.
+
+Skills do not sync between surfaces. This command only reaches the API
+workspace: claude.ai has no API, so upload there by hand from its web UI.`);
+  process.exit(0);
+}
+
 type SkillFile = { abs: string; rel: string; size: number };
 type Payload = { dir: string; apiName: string; files: SkillFile[]; bytes: number };
 
