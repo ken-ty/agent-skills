@@ -277,6 +277,24 @@ function checkFanOut(expected: string[]): void {
   console.log("");
 }
 
+/**
+ * Skills do not sync across surfaces, so "the store is wired up" only ever
+ * means the local filesystem one. Report the other two so a green doctor is
+ * not read as "everything, everywhere is current".
+ */
+function checkSurfaces(): void {
+  console.log("surfaces (skills do NOT sync between these)");
+  ok("local fs: ~/.claude/skills -> the store (checked above)");
+  if (process.env.ANTHROPIC_API_KEY !== undefined && process.env.ANTHROPIC_API_KEY.trim() !== "") {
+    ok("api workspace: ANTHROPIC_API_KEY set — `agent-skills push` can upload");
+  } else {
+    // Not a failure: plenty of setups never touch the API surface.
+    warn("api workspace: ANTHROPIC_API_KEY unset — `agent-skills push` cannot upload");
+  }
+  warn("claude.ai: manual only — no API exists; upload from the web UI by hand");
+  console.log("");
+}
+
 function main(): void {
   const store = checkStore();
   if (store === null) {
@@ -292,6 +310,7 @@ function main(): void {
   // Only loadable skills are expected downstream — one without a SKILL.md is
   // already reported above, and linking it would not help.
   checkFanOut(presentSkillNames().filter(hasSkillMd));
+  checkSurfaces();
 
   if (problems > 0) {
     console.log(`${problems} problem(s) found.`);

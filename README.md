@@ -55,8 +55,33 @@ audit フックを設置する。
 | `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成 |
 | `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・各エージェントの配線を検査 (read-only) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル) |
+| `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 
 `npm run <cmd>` でも同じものが動く（リポジトリ内でのみ）。`agent-skills`/`skill` はどこからでも。
+
+## スキルの 3 系統 — 互いに同期しない
+
+Anthropic のスキル置き場は 3 つあり、**公式に「サーフェス間で自動同期しない」と明記されている**
+([cross-surface availability](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview.md#cross-surface-availability))。
+store を canonical に置き、そこから各系統へ配るのがこのツールの立場:
+
+| 系統 | 読むところ | store からの反映 |
+| --- | --- | --- |
+| ローカル FS (`~/.claude/skills`) | Claude Code CLI | **自動** — `agent-skills link` が張る symlink |
+| API ワークスペース | Messages API | **自動** — `agent-skills push` |
+| claude.ai 個人スキル | claude.ai Web / Desktop | **手動のみ** — API が存在しない |
+
+### claude.ai (Web / Desktop) は手動アップロード
+
+**claude.ai の個人スキルだけは API が無く、自動化できない。** これは外部の制約であって、このツールの
+手抜きではない。`agent-skills push` を実行しても claude.ai には何も入らない。
+
+- **出す**: store の `skills/<name>/` を zip して、claude.ai の 設定 → スキル → 追加 でアップロードする。
+  **store を更新しても claude.ai 側は古いまま**なので、更新のたびに上げ直す。
+- **取り込む**: claude.ai にしか無いスキルは Web UI から取得して `skills/<name>/` に置き、
+  store の `add-agent-skill` の **vendored** 手順（`origin` に「claude.ai からエクスポート」と書く）に乗せる。
+
+`agent-skills doctor` の `surfaces` セクションが、この 3 系統の状態を毎回思い出させる。
 
 ## スキルの追加
 

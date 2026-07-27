@@ -51,6 +51,30 @@ flowchart BT
 自前で管理するのは config 1 つと `~/.agents/` 配下の **2 本の symlink だけ**。その下、各エージェント
 へのファンアウトは `skills` CLI の責務であり、再実装しない。
 
+## 配布先は 3 系統あり、同期しない
+
+上図は**ローカルのファイルシステム系統**だけを描いている。Anthropic のスキル置き場は実際には 3 つあり、
+[公式ドキュメントが「サーフェス間で自動同期しない」と明記](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview.md#cross-surface-availability)している。
+
+```mermaid
+flowchart LR
+  store[("store<br/><i>canonical</i>")]
+  fs["~/.claude/skills<br/><i>Claude Code</i>"]
+  api["API workspace<br/><i>Messages API</i>"]
+  web["claude.ai<br/><i>Web / Desktop</i>"]
+
+  store ==>|"symlink (link)"| fs
+  store ==>|"agent-skills push"| api
+  store -.->|"Web UI で手動<br/>API が無い"| web
+```
+
+実線 2 本はツールが自動で反映する。**破線 1 本 — claude.ai — だけは手動**で、これは API が存在しない
+という外部の制約であって設計判断ではない。したがって `agent-skills push` が成功しても claude.ai には
+何も入らず、その旨を push 自身が出力の最後に必ず書く（README に隠さない）。
+
+`doctor` の `surfaces` セクションが 3 系統の状態を毎回報告するので、「store が green ＝ どこも最新」と
+誤読されない。
+
 ### なぜ取得ロジックを自作しないか
 
 `skills` CLI ([vercel-labs/skills](https://github.com/vercel-labs/skills)) が既に持っている:

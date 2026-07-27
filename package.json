@@ -14,6 +14,7 @@
     "sync": "node scripts/run.js sync",
     "doctor": "node scripts/run.js doctor",
     "audit": "node scripts/run.js audit",
+    "push": "node scripts/run.js push",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

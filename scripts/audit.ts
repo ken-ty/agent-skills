@@ -21,6 +21,13 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  ALLOW,
+  type Finding,
+  isForbiddenPath,
+  reportFindings,
+  scan,
+} from "./lib/secrets.ts";
 
 /**
  * Audit the git repo it is invoked in, not a configured store. As a store's
@@ -35,61 +42,6 @@ function gitToplevel(): string {
 }
 
 const REPO_ROOT = gitToplevel();
-
-/** Escape hatch: put this marker on a line to accept it deliberately. */
-const ALLOW = "audit-ignore";
-
-type Rule = { id: string; why: string; re: RegExp };
-
-/**
- * Patterns are written so they do not match their own source text, which is
- * why this file itself is scanned like any other.
- */
-const RULES: ReadonlyArray<Rule> = [
-  {
-    id: "private-key",
-    why: "private key block",
-    re: /-----BEGIN[A-Z ]*PRIVATE KEY-----/,
-  },
-  {
-    id: "github-token",
-    why: "GitHub token",
-    re: /\bgh[pousr]_[A-Za-z0-9]{36,}/,
-  },
-  {
-    id: "aws-access-key",
-    why: "AWS access key id",
-    re: /\bAKIA[0-9A-Z]{16}\b/,
-  },
-  {
-    id: "llm-api-key",
-    why: "Anthropic / OpenAI style API key",
-    re: /\bsk-(ant-)?[A-Za-z0-9_-]{24,}/,
-  },
-  {
-    id: "slack-token",
-    why: "Slack token",
-    re: /\bxox[baprs]-[A-Za-z0-9-]{10,}/,
-  },
-  {
-    id: "google-api-key",
-    why: "Google API key",
-    re: /\bAIza[0-9A-Za-z_-]{35}\b/,
-  },
-  {
-    id: "secret-assignment",
-    why: "credential assigned to a variable",
-    re: /\b(api[_-]?key|secret|password|passwd|credential|access[_-]?token)\b["'\s]*[:=]["'\s]*[A-Za-z0-9_\-/+]{16,}/i,
-  },
-  {
-    id: "absolute-home-path",
-    why: "machine-specific absolute path (use ~ instead)",
-    re: /\/(?:Users|home)\/[A-Za-z0-9._-]+\//,
-  },
-];
-
-/** Paths that should never be committed at all, regardless of content. */
-const FORBIDDEN_PATHS = [/(^|\/)\.env(\.|$)/, /(^|\/)id_(rsa|ed25519)$/, /\.pem$/, /\.p12$/];
 
 function git(args: string[]): { ok: boolean; out: string } {
   const r = spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -125,30 +77,6 @@ function contentOf(file: string): string | null {
   return r.ok ? r.out : null;
 }
 
-/** Never print a match in full — the report itself would become a leak. */
-function redact(s: string): string {
-  return s.length <= 8 ? "***" : `${s.slice(0, 4)}***${s.slice(-2)} (${s.length} chars)`;
-}
-
-type Finding = { file: string; line: number; rule: Rule; match: string };
-
-function scan(file: string, text: string): Finding[] {
-  // Binary files have no lines worth reporting and blow up the output.
-  if (text.includes("\0")) return [];
-
-  const out: Finding[] = [];
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    if (line.includes(ALLOW)) continue;
-    for (const rule of RULES) {
-      const m = rule.re.exec(line);
-      if (m !== null) out.push({ file, line: i + 1, rule, match: m[0] });
-    }
-  }
-  return out;
-}
-
 function main(): void {
   const files = targets();
   if (files.length === 0) {
@@ -161,7 +89,7 @@ function main(): void {
   const unreadable: string[] = [];
 
   for (const file of files) {
-    if (FORBIDDEN_PATHS.some((re) => re.test(file))) {
+    if (isForbiddenPath(file)) {
       forbidden.push(file);
       continue;
     }
@@ -191,12 +119,9 @@ function main(): void {
     console.error(`  ${file}`);
     console.error("    could not be read — audit cannot clear what it cannot see\n");
   }
-  for (const f of findings) {
-    console.error(`  ${f.file}:${f.line}  [${f.rule.id}] ${f.rule.why}`);
-    console.error(`    matched: ${redact(f.match)}\n`);
-  }
+  reportFindings(findings);
 
-  console.error("If a hit is a false positive, add `audit-ignore` to that line.");
+  console.error(`If a hit is a false positive, add \`${ALLOW}\` to that line.`);
   console.error("If it is real: do NOT just amend — a committed secret stays in history.");
   console.error("Project-specific content belongs in that project's .claude/skills/, not here.");
   process.exitCode = 1;
