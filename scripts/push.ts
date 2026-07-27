@@ -145,6 +145,7 @@ function preparePayload(name: string): Payload | null {
   // commit — stricter, if anything, because this leaves the machine entirely.
   const findings: Finding[] = [];
   const forbidden: string[] = [];
+  const unreadable: string[] = [];
   for (const f of files) {
     if (isForbiddenPath(f.rel)) {
       forbidden.push(f.rel);
@@ -154,13 +155,17 @@ function preparePayload(name: string): Payload | null {
     try {
       text = fs.readFileSync(f.abs, "utf8");
     } catch {
+      // "could not read" is not "no secrets found", and this file would still
+      // be in the upload. Skipping it silently would ship something unexamined.
+      unreadable.push(f.rel);
       continue;
     }
     findings.push(...scan(`${name}/${f.rel}`, text));
   }
-  if (forbidden.length > 0 || findings.length > 0) {
+  if (forbidden.length > 0 || unreadable.length > 0 || findings.length > 0) {
     console.error(`  ${name}: BLOCKED — will not upload`);
     for (const p of forbidden) console.error(`    ${p}: this kind of file must never be shipped`);
+    for (const p of unreadable) console.error(`    ${p}: could not be read — cannot clear what it cannot see`);
     reportFindings(findings);
     return null;
   }
