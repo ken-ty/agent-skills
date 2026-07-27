@@ -190,12 +190,38 @@ const headers = (key: string): Record<string, string> => ({
 
 type RemoteSkill = { id: string; display_title: string; latest_version?: string };
 
-/** Existing custom skills in the workspace, keyed by display title. */
+/**
+ * Every existing custom skill in the workspace, keyed by display title.
+ *
+ * Paginates to exhaustion. The listing defaults to 20 per page, so stopping at
+ * the first one would miss skills already there and re-create them as
+ * duplicates instead of adding a version.
+ */
 async function listRemote(key: string): Promise<Map<string, RemoteSkill>> {
-  const res = await fetch(`${API_BASE}?source=custom`, { headers: headers(key) });
-  if (!res.ok) throw new Error(`list failed: ${res.status} ${await res.text()}`);
-  const body = (await res.json()) as { data?: RemoteSkill[] };
-  return new Map((body.data ?? []).map((s) => [s.display_title, s]));
+  const out = new Map<string, RemoteSkill>();
+  let page: string | null = null;
+
+  for (;;) {
+    const url = new URL(API_BASE);
+    url.searchParams.set("source", "custom");
+    url.searchParams.set("limit", "100");
+    if (page !== null) url.searchParams.set("page", page);
+
+    const res = await fetch(url, { headers: headers(key) });
+    if (!res.ok) throw new Error(`list failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data?: RemoteSkill[];
+      has_more?: boolean;
+      next_page?: string | null;
+    };
+
+    for (const s of body.data ?? []) out.set(s.display_title, s);
+
+    // Guard on next_page too: has_more without a token would spin forever.
+    if (body.has_more !== true || body.next_page == null) break;
+    page = body.next_page;
+  }
+  return out;
 }
 
 /**
@@ -269,6 +295,17 @@ async function main(): Promise<void> {
     console.error(`push: ${(e as Error).message}`);
     process.exitCode = 1;
     return;
+  }
+
+  // `display_title` is documented only as "a human-readable label"; that it
+  // equals the frontmatter name is an assumption this matching rests on. If the
+  // workspace already holds skills and none of them match, say so out loud —
+  // creating regardless is how duplicates accumulate silently.
+  const matched = [...payloads.values()].filter((p) => remote.has(p.apiName)).length;
+  if (remote.size > 0 && matched === 0) {
+    console.log(`  note: none of these matched the ${remote.size} skill(s) already in the workspace.`);
+    console.log("        if they are the same skills under a different title, pushing now duplicates");
+    console.log("        them — check the workspace before continuing.\n");
   }
 
   for (const [name, p] of payloads) {
