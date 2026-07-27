@@ -11,8 +11,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
+  AGENTS_SKILLS,
   catalogNames,
   ignorableNames,
+  inspectLink,
   namesOfKind,
   presentSkillNames,
   readCatalog,
@@ -164,6 +166,23 @@ function main(): void {
   if (missing.length === 0) {
     console.log("fetch: all present\n");
   } else {
+    // `npx skills add -g` writes to ~/.agents/skills — its own canonical store,
+    // which knows nothing about our config. When that link does not resolve to
+    // the store being synced, the bodies land somewhere else entirely while
+    // this command reports a successful fetch. Refuse rather than mislead.
+    const link = inspectLink(AGENTS_SKILLS, storeSkills());
+    if (link.kind !== "linked-correctly") {
+      console.error(`conflict: ${tilde(AGENTS_SKILLS)} does not point at ${tilde(storeSkills())}`);
+      console.error(
+        link.kind === "linked-elsewhere"
+          ? `  it points at ${tilde(link.target)} — \`npx skills\` would fetch there instead`
+          : "  `npx skills` would fetch into a store this command is not syncing",
+      );
+      console.error("  run `agent-skills link <store>` first, or drop AGENT_SKILLS_STORE");
+      process.exitCode = 1;
+      return;
+    }
+
     console.log(`fetch: ${missing.length} missing -> ${missing.join(", ")}`);
     console.log(`fetch: installing to ${agents.length} agents (${agents.slice(0, 4).join(", ")}…)\n`);
     for (const name of missing) {
