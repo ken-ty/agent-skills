@@ -49,6 +49,20 @@ export function storeCatalog(): string {
  */
 export const HOOKS_DIR_NAME = "hooks";
 
+/**
+ * Toplevel of the git repo containing `cwd`, or null when there is none.
+ *
+ * Used by the commands that must act on *the repo they were invoked in* rather
+ * than the configured store — `audit` and `doctor --repo`, both of which run as
+ * pre-commit hooks. Note this resolves a worktree to the worktree's own root,
+ * which is what a hook wants: that is the tree being committed.
+ */
+export function gitToplevel(cwd: string = process.cwd()): string | null {
+  const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" });
+  const top = (r.stdout ?? "").trim();
+  return r.status === 0 && top !== "" ? top : null;
+}
+
 /** Current `core.hooksPath` for the repo at `cwd`, or null when unset. Read-only. */
 export function gitHooksPath(cwd: string): string | null {
   const r = spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd, encoding: "utf8" });

@@ -2,6 +2,19 @@
  * Read-only health check of the whole chain:
  *   store/skills  <- ~/.agents/skills  <- ~/.claude/skills/<name>, ~/.codex/skills/<name>, ...
  * Exits non-zero if anything is broken.
+ *
+ *   node scripts/run.js doctor          the whole chain, on the configured store
+ *   node scripts/run.js doctor --repo   store contents only, on the invoking repo
+ *
+ * `--repo` is what the pre-commit hook runs. Two differences, both deliberate:
+ *
+ *   - It checks the repo it was invoked in, like `audit` does, instead of the
+ *     store this machine has configured. Commits are often made from a worktree
+ *     of the store, which is not the checkout config points at.
+ *   - It checks only what that repo contains — lockfile, catalog, skill bodies.
+ *     The `$HOME` wiring (symlinks, per-agent fan-out) and the surface report say
+ *     nothing about whether a commit is sound, and a broken symlink is no reason
+ *     to refuse one. Those stay in the full run.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -12,6 +25,7 @@ import {
   SKILL_KINDS,
   type Catalog,
   gitHooksPath,
+  gitToplevel,
   hookDrift,
   inspectLink,
   links,
@@ -24,7 +38,9 @@ import {
   thirdPartyNames,
   tilde,
 } from "./lib/paths.ts";
-import { CONFIG_PATH, STORE_ENV, resolveStoreOrNull } from "./lib/store.ts";
+import { CONFIG_PATH, STORE_ENV, overrideStore, resolveStoreOrNull } from "./lib/store.ts";
+
+const repoMode = process.argv.includes("--repo");
 
 let problems = 0;
 
@@ -229,9 +245,15 @@ function checkSkills(tracked: string[], catalog: Catalog | null): void {
     }
 
     if (!presentSet.has(name)) {
-      bad(
+      // A remote body is gitignored, so its absence says nothing about whether
+      // this tree describes itself correctly — only that nobody has synced here
+      // yet. A fresh worktree is exactly that, and it is where commits are made,
+      // so blocking on it would make the hook unusable. Own and vendored bodies
+      // are git-backed: missing means the commit really would drop them.
+      const localOnly = repoMode && kind === "remote";
+      (localOnly ? warn : bad)(
         kind === "remote"
-          ? `${label} missing — run \`agent-skills sync\``
+          ? `${label} missing — run \`agent-skills sync\`${localOnly ? " (gitignored, so not a commit problem)" : ""}`
           : `${label} missing — \`git checkout -- skills/${name}\``,
       );
     } else if (!hasSkillMd(name)) {
@@ -334,7 +356,46 @@ function checkSurfaces(): void {
   console.log("");
 }
 
+/** Shared tail: report the count and set the exit status. */
+function summarise(): void {
+  if (problems > 0) {
+    console.log(`${problems} problem(s) found.`);
+    process.exitCode = 1;
+  } else {
+    console.log("All checks passed.");
+  }
+}
+
+/**
+ * The pre-commit half: is this repo internally consistent?
+ *
+ * Note this reads the working tree, not the index — unlike `audit`, which scans
+ * staged content. A store is a directory of skill bodies plus two files
+ * describing them, and a half-staged store is already a store someone has to
+ * fix; blocking on the tree they are actually looking at is the useful report.
+ */
+function repoMain(): void {
+  const top = gitToplevel();
+  if (top === null) {
+    console.error("doctor --repo: not inside a git repo (this mode is for the pre-commit hook)");
+    process.exitCode = 1;
+    return;
+  }
+  overrideStore(top);
+  console.log(`doctor --repo: ${tilde(top)}\n`);
+
+  const tracked = checkLock();
+  const catalog = checkCatalog();
+  checkSkills(tracked, catalog);
+  summarise();
+}
+
 function main(): void {
+  if (repoMode) {
+    repoMain();
+    return;
+  }
+
   const store = checkStore();
   if (store === null) {
     console.log(`${problems} problem(s) found.`);
@@ -350,13 +411,7 @@ function main(): void {
   // already reported above, and linking it would not help.
   checkFanOut(presentSkillNames().filter(hasSkillMd));
   checkSurfaces();
-
-  if (problems > 0) {
-    console.log(`${problems} problem(s) found.`);
-    process.exitCode = 1;
-  } else {
-    console.log("All checks passed.");
-  }
+  summarise();
 }
 
 main();

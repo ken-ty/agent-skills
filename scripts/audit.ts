@@ -22,6 +22,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runGitleaks } from "./lib/gitleaks.ts";
+import { gitToplevel } from "./lib/paths.ts";
 import {
   ALLOW,
   type Finding,
@@ -36,13 +37,7 @@ import {
  * store being committed to — correct even with several stores on one machine,
  * and it needs no store config to run.
  */
-function gitToplevel(): string {
-  const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
-  const top = (r.stdout ?? "").trim();
-  return r.status === 0 && top !== "" ? top : process.cwd();
-}
-
-const REPO_ROOT = gitToplevel();
+const REPO_ROOT = gitToplevel() ?? process.cwd();
 
 function git(args: string[]): { ok: boolean; out: string } {
   const r = spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
