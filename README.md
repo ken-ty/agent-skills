@@ -201,4 +201,6 @@ audit: 21 file(s) clean (built-in + gitleaks)
 - **`kind: remote` なのに実体が無い** — `agent-skills sync`
 - **`kind: own`/`vendored` なのに実体が無い** — `git checkout -- skills/<name>`（store で）
 - **`core.hooksPath unset`** — pre-commit 検査が動いていない。`agent-skills link`
+- **`pre-commit differs from the tool's template`** — ツール側の hook が更新され、store の
+  コピーが古いまま。`agent-skills link` で入れ直す
 - **`This repo needs Node >= 22.18`** — `nvm install 22` などで上げる
