@@ -59,35 +59,48 @@ audit フックを設置する。
 
 `npm run <cmd>` でも同じものが動く（リポジトリ内でのみ）。`agent-skills`/`skill` はどこからでも。
 
-## スキルの 3 系統 — 互いに同期しない
+## サーフェスは 5 つあり、互いに同期しない
 
-Anthropic のスキル置き場は 3 つあり、**公式に「サーフェス間で自動同期しない」と明記されている**
+Anthropic のスキル置き場は複数あり、**公式に「サーフェス間で自動同期しない」と明記されている**
 ([cross-surface availability](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview.md#cross-surface-availability))。
-store を canonical に置き、そこから各系統へ配るのがこのツールの立場:
+store を canonical に置き、そこから配るのがこのツールの立場だが、**届く先は 2 つだけ**:
 
-| 系統 | 読むところ | store からの反映 |
+| サーフェス | 読むところ | store からの反映 |
 | --- | --- | --- |
 | ローカル FS (`~/.claude/skills`) | **ローカルで動く** Claude Code — CLI / デスクトップ / VS Code / JetBrains | **自動** — `agent-skills link` が張る symlink |
 | API ワークスペース | Messages API | **自動** — `agent-skills push` |
+| クラウドセッション | claude.ai/code / routines | **届かない** — リポジトリ側で用意する（下記） |
+| Cowork | 対話・スケジュール両方 | **届かない** — claude.ai アカウントのスキルのみ |
 | claude.ai 個人スキル | claude.ai Web / Desktop | **手動のみ** — API が存在しない |
-| （届かない） | **クラウドセッション** — claude.ai/code / Cowork / routines | **届かない** — 下記参照 |
 
-### クラウドセッションには symlink が届かない
+> **このツールの SSOT は「ローカル Claude Code + API ワークスペース」までを指す。**
+> 下 3 つは symlink でも `push` でも届かず、`agent-skills` の管轄外にある。
 
-Web / Cowork / routines は Anthropic 側のマシンで動くので、**このマシンの `~/.claude/skills` を
-読まない**（[公式明記](https://code.claude.com/docs/en/skills#skills-in-cowork-and-cloud-sessions)）。
-どれだけ綺麗に symlink を張っても不可視。そこへ届けたいなら経路は 2 つ:
+### クラウドセッションと Cowork には symlink が届かない
 
-- そのリポジトリの `.claude/skills` にコミットする（プロジェクト単位）
-- **プラグインとして配る** — `.claude/settings.json` の `enabledPlugins` で宣言する
-  （[plugins](https://code.claude.com/docs/en/plugins) / [marketplace](https://code.claude.com/docs/en/plugin-marketplaces)）
+どちらも Anthropic 側のマシンで動くので、**このマシンの `~/.claude/skills` を読まない**
+（[公式明記](https://code.claude.com/docs/en/skills#skills-in-cowork-and-cloud-sessions)）。
+どれだけ綺麗に symlink を張っても不可視。**ただし対処法が違うので、混同しないこと**:
+
+- **クラウドセッション** (claude.ai/code / routines) … clone されたリポジトリの
+  `.claude/skills` にコミットするか、リポジトリの `.claude/settings.json` でプラグインを宣言する。
+  リポジトリが宣言したプラグインはセッション開始時に入るが、**ユーザ設定で有効化しただけの
+  プラグインは転送されない**（[plugins](https://code.claude.com/docs/en/plugins) /
+  [marketplace](https://code.claude.com/docs/en/plugin-marketplaces)）
+- **Cowork** … 対話・スケジュールとも **claude.ai アカウントで有効化したスキル**をセッション開始時に
+  同期する。リポジトリにコミットしてもプラグインを宣言しても届かない
+
+なお **plugin / marketplace 化は採らない**と決めている（[#10](https://github.com/ken-ty/agent-skills/issues/10)）。
+塞げるのはクラウドセッションだけで、しかもリポジトリ単位。Cowork と claude.ai は塞がらないため、
+store を marketplace 構造へ組み替えるコストに見合わない。
 
 ### 同名は personal が project に勝つ
 
 優先順位は **enterprise > personal (`~/.claude`) > project (`.claude`) > plugin > bundled**
 （[出典](https://code.claude.com/docs/en/skills#where-skills-live)）。
 つまり global store に同名スキルがあると、**プロジェクト固有として置いたスキルが黙って負ける**。
-プラグインだけは `plugin-name:skill-name` の名前空間を持つので衝突しない。
+プラグインだけは `plugin-name:skill-name` の名前空間を持つので衝突しないが、上記の通り
+プラグイン化は採らないので、この衝突は検出で対処する（[#11](https://github.com/ken-ty/agent-skills/issues/11)）。
 
 ### claude.ai (Web / Desktop) は手動アップロード
 
@@ -99,7 +112,7 @@ Web / Cowork / routines は Anthropic 側のマシンで動くので、**この�
 - **取り込む**: claude.ai にしか無いスキルは Web UI から取得して `skills/<name>/` に置き、
   store の `add-agent-skill` の **vendored** 手順（`origin` に「claude.ai からエクスポート」と書く）に乗せる。
 
-`agent-skills doctor` の `surfaces` セクションが、この 3 系統の状態を毎回思い出させる。
+`agent-skills doctor` の `surfaces` セクションが、この 5 サーフェスの状態を毎回思い出させる。
 
 ## スキルの追加
 
