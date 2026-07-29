@@ -1,0 +1,58 @@
+# ROADMAP
+
+`/loop` が毎サイクル 1 項目を拾うためのバックログ。**着手可能** から S サイズを 1 つ選び、
+実装 → テスト → 自己レビュー → ドキュメント更新 → コミットの 1 サイクルを回す。
+
+- 判断が要ることはチャットで聞かず **issue に上げる**（`human-input` 相当は `question` ラベル）。
+  README の「保留中の作業は会話ではなく issue へ」ルールに従う。
+- 完了した項目はこの表から消し、[完了ログ](#完了ログ) に 1 行で残す。
+
+## 確定している設計方針
+
+`/loop` が毎サイクル読み直す前提。これに反する実装をしないこと。
+
+| 方針 | 決定 | 出所 |
+| --- | --- | --- |
+| SSOT の目的 | **一貫性**（復旧ではない） | [#10](https://github.com/ken-ty/agent-skills/issues/10) |
+| SSOT の到達範囲 | **ローカル Claude Code + API ワークスペース限定**。Cowork と claude.ai 個人スキルには原理的に届かない | [#10](https://github.com/ken-ty/agent-skills/issues/10) |
+| plugin / marketplace 化 | **やらない**。得られるのはクラウドセッションへ repo 単位のみ | [#10](https://github.com/ken-ty/agent-skills/issues/10) |
+| claude.ai 側スキルの削除 | **保留**（[#13](https://github.com/ken-ty/agent-skills/issues/13) の結論待ち。削除は Cowork を捨てる決定と等価） | [#10](https://github.com/ken-ty/agent-skills/issues/10) |
+| 管轄範囲 | **skills 限定**。dotfiles / harness には広げない（chezmoi を独立に使う） | [#9](https://github.com/ken-ty/agent-skills/issues/9) |
+| 外部ツール依存 | 必須は **Node >= 22.18 だけ**。他は optional 併用に留める | [#9](https://github.com/ken-ty/agent-skills/issues/9) |
+| catalog の位置づけ | スキルの **出自と更新手段**を持つ唯一の場所。エントリの無い実体は失敗扱い | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+
+## 着手可能
+
+| # | 内容 | サイズ | 出所 |
+| --- | --- | --- | --- |
+| 1 | README / `docs/architecture.md` のサーフェス表を正確化する。plugin では Cowork に届かないこと、plugin 化しない決定、SSOT の看板を「ローカル Claude Code + API ワークスペース限定」に下ろすことを反映 | S | [#10](https://github.com/ken-ty/agent-skills/issues/10) |
+| 2 | `agent-skills audit` に gitleaks の optional 併用を実装する。`command -v gitleaks` があれば併用し、無ければ現行の `scripts/lib/secrets.ts` にフォールバック。必須依存にはしない | S | [#9](https://github.com/ken-ty/agent-skills/issues/9) |
+| 3 | `doctor` に hook の内容 drift 検出を足す。現状 `checkHooks` は存在と実行可能しか見ておらず、テンプレートを変えても既存 store は古い hook を持ち続ける。★2 の前提 | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+| 4 | ★2 pre-commit で `doctor` も実行し、catalog とズレたままの commit を止める（G3）。**3 の完了後に着手する** | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+| 5 | `doctor` に global store と project `.claude/skills` の同名衝突検出を足す。personal が project に勝つため、プロジェクト固有として置いたスキルが黙って無視される | S | [#11](https://github.com/ken-ty/agent-skills/issues/11) |
+| 6 | ★4 `doctor` に remote 実体の git 追跡検出を足す（G5）。`npx skills add` 後 `sync` 前に `git add -A` すると remote 実体が追跡されるが、現状誰も検出しない | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+
+## 要分割（そのままでは 1 サイクルに収まらない）
+
+| # | 内容 | サイズ | 出所 |
+| --- | --- | --- | --- |
+| 7 | ★3 `agent-skills add` を新設し、全 kind で「実体用意 → catalog 追記 → sync → doctor」を原子化する（G1、#8 の本命） | M | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+| 8 | ★5 copy モードで `~/.claude` に入った実体を bad 相当にする（G4）。`unity-mcp-skill` のように外部ツールが直接書くケースがあるため allowlist が要る | M | [#8](https://github.com/ken-ty/agent-skills/issues/8), [#11](https://github.com/ken-ty/agent-skills/issues/11) |
+
+拾う場合は、まず S に割る提案を issue へコメントしてから着手する。
+
+## ブロック中（loop は拾わない）
+
+| # | 内容 | ブロック理由 |
+| --- | --- | --- |
+| B1 | `push` の実送信を検証する | `ANTHROPIC_API_KEY` の用意が要る（人間）。[#6](https://github.com/ken-ty/agent-skills/issues/6) |
+| B2 | claude.ai から store を MCP で読み書きする | 方針未決。MCP はデータアクセスでありスキル登録ではないため、claude.ai 側で自動発火しない点を含めて評価が要る。[#13](https://github.com/ken-ty/agent-skills/issues/13) |
+| B3 | API ワークスペースの `skill_id` の永続化先を決める | B1 の実送信検証に依存。[#14](https://github.com/ken-ty/agent-skills/issues/14) |
+
+## 完了ログ
+
+| 日付 | 内容 |
+| --- | --- |
+| 2026-07-27 | ★1 doctor が「実体はあるが catalog に無い」を `bad` として落とすようになった（`cb31bde`、[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
+| 2026-07-29 | [#10](https://github.com/ken-ty/agent-skills/issues/10) plugin 化を見送り、claude.ai 削除は #13 待ちで保留と決定 |
+| 2026-07-29 | [#9](https://github.com/ken-ty/agent-skills/issues/9) 管轄は skills 限定と決定し close。audit は gitleaks を optional 併用 |
