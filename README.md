@@ -53,7 +53,7 @@ audit フックを設置する。
 | `agent-skills link <dir>` | 既存 store を config に登録し、`~/.agents` を向け、hook を設置 (冪等、`--dry-run` 可) |
 | `agent-skills list` | store のスキルを kind ごとに一覧 (read-only) |
 | `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成 |
-| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
+| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 
@@ -135,6 +135,8 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
   Claude Code へは per-skill symlink が要る: `ln -s ../../.agents/skills/<name> ~/.claude/skills/<name>`。
 - **remote** … `npx skills add <owner>/<repo> -g`（**必ず 2 エージェント以上を選ぶ**。1 つだと copy モードに
   なり store を経由しない）→ `catalog.json` に `kind: remote` → `agent-skills sync` → commit。
+  **`sync` の前に `git add -A` しないこと** — gitignore を書くのは `sync` なので、その前に足すと
+  実体が git に追跡され、以後 gitignore が効かなくなる（`doctor` が BAD で検出する）。
 - **vendored** … 実体を `skills/<name>/` に置く → `catalog.json` に `kind: vendored`（`origin` 必須）→ commit。
 
 ## 設計
@@ -230,6 +232,8 @@ audit: 21 file(s) clean (built-in + gitleaks)
 - **`~/.claude/skills/<name>` が実ディレクトリ / 別の store を指す** — copy モードか旧配線。消して
   2 エージェント以上で入れ直すか、`agent-skills link` で張り替える
 - **`kind: remote` なのに実体が無い** — `agent-skills sync`
+- **`<name>: N file(s) tracked by git`** — `sync` 前に `git add -A` した。`git rm -r --cached skills/<name>`
+  してから `agent-skills sync`
 - **`kind: own`/`vendored` なのに実体が無い** — `git checkout -- skills/<name>`（store で）
 - **`core.hooksPath unset`** — pre-commit 検査が動いていない。`agent-skills link`
 - **`pre-commit differs from the tool's template`** — ツール側の hook が更新され、store の
