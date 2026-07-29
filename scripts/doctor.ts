@@ -51,8 +51,11 @@ const isInside = (p: string, dir: string): boolean => {
 };
 
 /** A skill is only discoverable by agents if it has a SKILL.md at its root. */
-const hasSkillMd = (name: string): boolean =>
-  fs.existsSync(path.join(storeSkills(), name, "SKILL.md"));
+const loadable = (dir: string, name: string): boolean =>
+  fs.existsSync(path.join(dir, name, "SKILL.md"));
+
+/** The same question, for the store — where most of this file looks. */
+const hasSkillMd = (name: string): boolean => loadable(storeSkills(), name);
 
 const ok = (m: string): void => console.log(`  ok    ${m}`);
 const warn = (m: string): void => console.log(`  warn  ${m}`);
@@ -332,6 +335,55 @@ function checkFanOut(expected: string[]): void {
 }
 
 /**
+ * A project's own skills lose to the global store on a name clash.
+ *
+ * Claude Code's precedence is enterprise > personal > project, so a skill in
+ * `~/.claude/skills` (i.e. this store) shadows the same name in a repo's
+ * `.claude/skills`. Nothing reports it: the project skill is simply never
+ * loaded, and the global one answers in its place. That is the exact failure
+ * the store's own `add-agent-skill` guidance can walk someone into, since it
+ * sends project-specific skills to `.claude/skills`.
+ *
+ * Checked against the tree doctor was invoked in — like `audit`, this command
+ * has something to say about wherever it is run. Outside a project there is
+ * nothing to shadow, which is reported rather than skipped: "looked, found
+ * none" and "did not look" are different answers.
+ *
+ * https://code.claude.com/docs/en/skills#where-skills-live
+ */
+function checkProjectSkills(): void {
+  const root = gitToplevel() ?? process.cwd();
+  const dir = path.join(root, ".claude", "skills");
+  console.log(`project skills (${tilde(dir)})`);
+
+  if (!fs.existsSync(dir)) {
+    ok("no project-level skills here — nothing the store can shadow");
+    console.log("");
+    return;
+  }
+
+  // Only loadable skills on either side can collide: one without a SKILL.md is
+  // invisible to agents, so it neither shadows nor gets shadowed.
+  const shadowing = new Set(presentSkillNames().filter(hasSkillMd));
+  const projectNames = presentSkillNames(dir).filter((n) => loadable(dir, n));
+
+  if (projectNames.length === 0) {
+    ok("holds no loadable skill");
+  }
+  for (const name of projectNames) {
+    if (shadowing.has(name)) {
+      bad(
+        `${name}: shadowed by the store — personal skills override project ones, so ` +
+          `${tilde(path.join(dir, name))} is never loaded. Rename one, or drop it from the store.`,
+      );
+    } else {
+      ok(`${name}: project-only, no clash with the store`);
+    }
+  }
+  console.log("");
+}
+
+/**
  * Skills do not sync across surfaces, so "the store is wired up" only ever
  * means the local filesystem one. Report the others so a green doctor is not
  * read as "everything, everywhere is current".
@@ -410,6 +462,7 @@ function main(): void {
   // Only loadable skills are expected downstream — one without a SKILL.md is
   // already reported above, and linking it would not help.
   checkFanOut(presentSkillNames().filter(hasSkillMd));
+  checkProjectSkills();
   checkSurfaces();
   summarise();
 }

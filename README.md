@@ -53,7 +53,7 @@ audit フックを設置する。
 | `agent-skills link <dir>` | 既存 store を config に登録し、`~/.agents` を向け、hook を設置 (冪等、`--dry-run` 可) |
 | `agent-skills list` | store のスキルを kind ごとに一覧 (read-only) |
 | `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成 |
-| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・各エージェントの配線を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
+| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 
@@ -101,6 +101,18 @@ store を marketplace 構造へ組み替えるコストに見合わない。
 つまり global store に同名スキルがあると、**プロジェクト固有として置いたスキルが黙って負ける**。
 プラグインだけは `plugin-name:skill-name` の名前空間を持つので衝突しないが、上記の通り
 プラグイン化は採らないので、この衝突は検出で対処する（[#11](https://github.com/ken-ty/agent-skills/issues/11)）。
+
+`agent-skills doctor` は**実行したツリーの `.claude/skills`** を見て、store と同名のものを BAD に
+する（`audit` と同じく「呼ばれた場所」が対象）。プロジェクト内で 1 回打てば分かる:
+
+```text
+project skills (~/work/foo/.claude/skills)
+  BAD   ghq: shadowed by the store — personal skills override project ones, so
+        ~/work/foo/.claude/skills/ghq is never loaded. Rename one, or drop it from the store.
+```
+
+`.claude/skills` が無い場所では「無かった」と 1 行報告する（見ていないのか、見て問題が無かったのかを
+区別できるようにするため）。
 
 ### claude.ai (Web / Desktop) は手動アップロード
 
