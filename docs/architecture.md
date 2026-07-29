@@ -51,29 +51,59 @@ flowchart BT
 自前で管理するのは config 1 つと `~/.agents/` 配下の **2 本の symlink だけ**。その下、各エージェント
 へのファンアウトは `skills` CLI の責務であり、再実装しない。
 
-## 配布先は 3 系統あり、同期しない
+## 配布先は 5 サーフェスあり、同期しない。届くのは 2 つだけ
 
-上図は**ローカルのファイルシステム系統**だけを描いている。Anthropic のスキル置き場は実際には 3 つあり、
+上図は**ローカルのファイルシステム系統**だけを描いている。Anthropic のスキル置き場は実際には 5 つあり、
 [公式ドキュメントが「サーフェス間で自動同期しない」と明記](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview.md#cross-surface-availability)している。
 
 ```mermaid
 flowchart LR
   store[("store<br/><i>canonical</i>")]
-  fs["~/.claude/skills<br/><i>Claude Code</i>"]
+  fs["~/.claude/skills<br/><i>ローカル Claude Code</i>"]
   api["API workspace<br/><i>Messages API</i>"]
-  web["claude.ai<br/><i>Web / Desktop</i>"]
+  cloud["クラウドセッション<br/><i>claude.ai/code · routines</i>"]
+  cowork["Cowork<br/><i>対話 · スケジュール</i>"]
+  web["claude.ai 個人スキル<br/><i>Web / Desktop</i>"]
 
   store ==>|"symlink (link)"| fs
   store ==>|"agent-skills push"| api
+  store -.->|"repo の .claude/skills<br/>または repo 宣言 plugin<br/><b>リポジトリ単位</b>"| cloud
+  store -.->|"claude.ai で有効化<br/><b>手動</b>"| cowork
   store -.->|"Web UI で手動<br/>API が無い"| web
 ```
 
-実線 2 本はツールが自動で反映する。**破線 1 本 — claude.ai — だけは手動**で、これは API が存在しない
-という外部の制約であって設計判断ではない。したがって `agent-skills push` が成功しても claude.ai には
-何も入らず、その旨を push 自身が出力の最後に必ず書く（README に隠さない）。
+実線 2 本だけがツールの管轄で、自動で反映される。**したがってこのツールの SSOT が意味するのは
+「ローカル Claude Code + API ワークスペース」までである。** 破線 3 本は届かない:
 
-`doctor` の `surfaces` セクションが 3 系統の状態を毎回報告するので、「store が green ＝ どこも最新」と
-誤読されない。
+- **クラウドセッション** (claude.ai/code / routines) は Anthropic 側のマシンで動き、このマシンの
+  `~/.claude/skills` を読まない。届けるには clone されるリポジトリの `.claude/skills` にコミットするか、
+  そのリポジトリの `.claude/settings.json` でプラグインを宣言する。**ユーザ設定で有効化しただけの
+  プラグインは転送されない**ため、どちらもリポジトリ単位の作業になり、global store の代替にはならない
+- **Cowork** は対話・スケジュールとも **claude.ai アカウントで有効化したスキル**をセッション開始時に
+  同期する。リポジトリにコミットしてもプラグインを宣言しても届かない
+- **claude.ai 個人スキル**は API が存在しないため手動のみ
+
+出典: [skills in Cowork and cloud sessions](https://code.claude.com/docs/en/skills#skills-in-cowork-and-cloud-sessions)。
+
+`agent-skills push` が成功しても claude.ai には何も入らず、その旨を push 自身が出力の最後に必ず書く
+（README に隠さない）。`doctor` の `surfaces` セクションが 5 サーフェスの状態を毎回報告するので、
+「store が green ＝ どこも最新」と誤読されない。
+
+### なぜ plugin / marketplace 化を採らないか
+
+一貫性を目的に据えると（[#10](https://github.com/ken-ty/agent-skills/issues/10)）、届かない 3 本を
+どう塞ぐかが論点になる。プラグイン化は候補だったが、採らないと決めた:
+
+- 塞げるのは**クラウドセッションだけ**で、しかもリポジトリごとに宣言が要る。Cowork と claude.ai は
+  プラグインでも塞がらないため、「どこでも同じスキル」という目標には構造的に届かない
+- store は private であり、[private marketplace は背景自動更新が HTTPS 認証できず再 clone に
+  フォールバックする](https://code.claude.com/docs/en/plugin-marketplaces#private-repositories)という
+  既知の不安定さを抱える（`CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE=1` 等の回避策が要る）
+- 対して store を marketplace 構造（`.claude-plugin/marketplace.json` + `plugins/<name>/`）へ
+  組み替えるコストは大きい
+
+したがって**看板を下ろす方を選ぶ**。届かないサーフェスは「届かない」と書き、`doctor` が毎回それを
+報告する。塞いだふりをしない。
 
 ### なぜ取得ロジックを自作しないか
 

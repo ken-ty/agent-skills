@@ -282,8 +282,8 @@ function checkFanOut(expected: string[]): void {
 
 /**
  * Skills do not sync across surfaces, so "the store is wired up" only ever
- * means the local filesystem one. Report the other two so a green doctor is
- * not read as "everything, everywhere is current".
+ * means the local filesystem one. Report the others so a green doctor is not
+ * read as "everything, everywhere is current".
  */
 function checkSurfaces(): void {
   console.log("surfaces (skills do NOT sync between these)");
@@ -294,10 +294,13 @@ function checkSurfaces(): void {
     // Not a failure: plenty of setups never touch the API surface.
     warn("api workspace: ANTHROPIC_API_KEY unset — `agent-skills push` cannot upload");
   }
-  // Cloud sessions run on Anthropic's machines, so the store on this one is
-  // invisible to them however well it is linked:
+  // Cloud sessions and Cowork run on Anthropic's machines, so the store on this
+  // one is invisible to them however well it is linked. Their remedies differ,
+  // so they are reported apart: a cloud session picks up what the cloned repo
+  // declares, while Cowork only ever loads the claude.ai account's skills.
   // https://code.claude.com/docs/en/skills#skills-in-cowork-and-cloud-sessions
-  warn("cloud sessions (web / cowork / routines): never read ~/.claude/skills — commit to a repo's .claude/skills, or ship a plugin");
+  warn("cloud sessions (claude.ai/code, routines): never read ~/.claude/skills — commit to the repo's .claude/skills, or declare a plugin in the repo's .claude/settings.json");
+  warn("cowork: never reads ~/.claude/skills, and repo-declared plugins do not apply — it loads the skills enabled for your claude.ai account");
   warn("claude.ai: manual only — no API exists; upload from the web UI by hand");
   console.log("");
 }
