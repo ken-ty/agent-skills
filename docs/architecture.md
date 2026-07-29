@@ -273,6 +273,29 @@ copy モードで入ってしまった場合は事後的に気づける。
   指示なので repoint する。symlink は実体を持たないので安全（実ディレクトリは上の退避ルール）。
   張り替え前の向き先はログに出す
 
+### pre-commit は「呼ばれたリポジトリ」を見る
+
+`audit` も `doctor --repo` も、config に記録された store ではなく
+**`git rev-parse --show-toplevel`** を対象にする（`gitToplevel()`）。store の運用は worktree 前提
+（並行セッションがぶつからないように）なので、commit 元は config が指すチェックアウトとは限らない。
+config を見に行く実装だと、worktree で追加したスキルを検査せず、無関係なメインチェックアウトを
+検査してしまう。`doctor --repo` はこれを `overrideStore()` で実現している。
+
+### `doctor --repo` はフル `doctor` の部分集合ではなく、別の問い
+
+フル `doctor` は「このマシンでスキルが読めるか」を見る。`--repo` は「このツリーは自分自身を
+正しく記述しているか」を見る。前者には `$HOME` の symlink やエージェントごとのファンアウトが
+含まれるが、それらは commit の内容とは無関係だ。壊れた symlink を理由に commit を止めるのは
+誤り — 直す場所が違う。
+
+同じ理由で、`kind: remote` の実体欠如は `--repo` では warn に落とす。remote は gitignore されて
+いて commit に入らないので、無いことは「まだ sync していない」以上の意味を持たない。新しい
+worktree は必ずこの状態から始まるため、ここを BAD にすると hook が常時ブロックして使えなくなる。
+
+`--repo` が index ではなく作業ツリーを見るのは `audit` との違い。store は「スキル実体 + それを
+説明する 2 ファイル」であり、half-staged な store はその時点で人が直すべき状態なので、
+実際に目の前にあるツリーを報告するほうが有用と判断した。
+
 ### hook はコピーなので、`doctor` が内容のずれを見る
 
 `link` は `hooks/pre-commit` を store に**コピーする**。symlink ではないのは、hook を

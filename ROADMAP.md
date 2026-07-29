@@ -25,7 +25,6 @@
 
 | # | 内容 | サイズ | 出所 |
 | --- | --- | --- | --- |
-| 2 | ★2 pre-commit で `doctor` も実行し、catalog とズレたままの commit を止める（G3） | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
 | 3 | `doctor` に global store と project `.claude/skills` の同名衝突検出を足す。personal が project に勝つため、プロジェクト固有として置いたスキルが黙って無視される | S | [#11](https://github.com/ken-ty/agent-skills/issues/11) |
 | 4 | ★4 `doctor` に remote 実体の git 追跡検出を足す（G5）。`npx skills add` 後 `sync` 前に `git add -A` すると remote 実体が追跡されるが、現状誰も検出しない | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
 
@@ -56,3 +55,4 @@
 | 2026-07-29 | README / `docs/architecture.md` / `doctor` のサーフェス記述を 5 サーフェスに正確化。Cowork は plugin でも届かないことと、plugin 化しない決定を反映（[#10](https://github.com/ken-ty/agent-skills/issues/10)） |
 | 2026-07-29 | `audit` と `push` に gitleaks の optional 併用を実装（`scripts/lib/gitleaks.ts`）。未導入・起動失敗はブロックしない（[#9](https://github.com/ken-ty/agent-skills/issues/9)） |
 | 2026-07-29 | `doctor` が hook の内容 drift を BAD として検出するようになった（`hookDrift()`、[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
+| 2026-07-29 | ★2 pre-commit が `audit` に加えて `doctor --repo` を実行するようになった。catalog とズレた commit を止める（[#8](https://github.com/ken-ty/agent-skills/issues/8)） |

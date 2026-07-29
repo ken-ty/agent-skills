@@ -7,6 +7,7 @@
  * once and read back here.
  *
  * Resolution order:
+ *   0. overrideStore()                           in-process, set by the caller
  *   1. $AGENT_SKILLS_STORE                       env override — wins (CI, multi-store)
  *   2. ~/.config/agent-skills/config.json        { "store": "<abs path>" }
  *   3. none — caller decides (resolveStore throws; resolveStoreOrNull returns null)
@@ -39,8 +40,23 @@ export function writeConfig(cfg: Config): void {
   fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(cfg, null, 2)}\n`);
 }
 
-/** Configured store path (env over config), resolved to absolute, or null. */
+let override: string | null = null;
+
+/**
+ * Point every store lookup in this process at `dir`, ahead of env and config.
+ *
+ * For commands that must operate on the repo they were invoked in rather than
+ * the one this machine happens to have configured — `doctor --repo` running as
+ * a pre-commit hook, where the repo being committed to may be a worktree of the
+ * store, not the checkout config points at.
+ */
+export function overrideStore(dir: string): void {
+  override = path.resolve(dir);
+}
+
+/** Configured store path (override over env over config), absolute, or null. */
 export function resolveStoreOrNull(): string | null {
+  if (override !== null) return override;
   const env = process.env[STORE_ENV];
   if (env !== undefined && env.trim() !== "") return path.resolve(env);
   const cfg = readConfig();

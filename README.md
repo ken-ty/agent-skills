@@ -53,7 +53,7 @@ audit フックを設置する。
 | `agent-skills link <dir>` | 既存 store を config に登録し、`~/.agents` を向け、hook を設置 (冪等、`--dry-run` 可) |
 | `agent-skills list` | store のスキルを kind ごとに一覧 (read-only) |
 | `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成 |
-| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・各エージェントの配線を検査 (read-only) |
+| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・各エージェントの配線を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 
@@ -133,7 +133,7 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
   install.sh          ── 操作 ──▶      skills/.gitignore        remote=ignore (sync が管理)
   scripts/                             catalog.json             来歴 (このツールが検査)
     run.js  … Node 検査 + dispatch      skills.lock              取得 (npx skills が書く)
-    init link list sync doctor audit    hooks/pre-commit → `agent-skills audit`
+    init link list sync doctor audit    hooks/pre-commit → audit + `doctor --repo`
     lib/{paths,store}.ts
   hooks/pre-commit … store へ配る雛形
 
@@ -154,6 +154,25 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
 
 `devDependencies` の TypeScript は `npm run typecheck` 専用（型ストリップは型検査をしないため。
 これだけは `npm install` が要る）。
+
+### pre-commit が止めるもの
+
+store の `hooks/pre-commit` は 2 つを順に走らせる（`agent-skills link` が設置、
+`core.hooksPath=hooks` で有効化）:
+
+1. `agent-skills audit` … staged 内容の秘密・マシン固有情報
+2. `agent-skills doctor --repo` … `catalog.json` / `skills.lock` / スキル実体の整合
+
+`--repo` は**フル `doctor` とは見る範囲が違う**。commit の可否に関係するものだけを見る:
+
+- **見る** … 実行した git リポジトリの中身（lockfile / catalog / スキル実体）。config の store では
+  なく「いま commit しようとしているツリー」なので、store の worktree からでも正しく効く
+- **見ない** … `~/.agents` の symlink、各エージェントへのファンアウト、サーフェス一覧。
+  これらが壊れていても commit の内容は健全なので、止める理由が無い
+- **warn に落とす** … `kind: remote` の実体欠如。gitignore されていて commit に入らないため。
+  新しい worktree は必ずこの状態になる
+
+どちらも `git commit --no-verify` で迂回できる。ミスの backstop であって、セキュリティ境界ではない。
 
 ### gitleaks があれば秘密検査を強化する（任意）
 

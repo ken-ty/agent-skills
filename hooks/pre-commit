@@ -1,24 +1,35 @@
 #!/bin/sh
 #
-# Block commits that carry secrets or machine-specific data.
+# Block commits that carry secrets or machine-specific data, or that would
+# leave the store describing itself wrongly.
 #
 # This is the template the `agent-skills` CLI installs into a store's hooks/
 # dir. It is active only where `git config core.hooksPath hooks` has been set —
 # done by `agent-skills link`, verified by `agent-skills doctor`. Hooks live in
 # the store repo rather than .git/hooks so they are version-controlled.
 #
-# It delegates to the installed `agent-skills` command, which audits the git
-# repo it is invoked in (this store). Falls back to `skill` if only that alias
-# is on PATH.
+# It delegates to the installed `agent-skills` command. Both subcommands act on
+# the git repo they are invoked in (this store, or a worktree of it), not on
+# whatever store this machine has configured. Falls back to `skill` if only that
+# alias is on PATH.
+#
+#   audit        secrets and machine-specific data in the staged content
+#   doctor --repo   catalog / skills.lock / skill bodies still agree
+#
+# audit runs first: a leaked secret is the worse outcome, and `set -e` means a
+# hit there stops the commit before the second check adds noise.
 #
 # `git commit --no-verify` bypasses this. That is git's design, not an
 # oversight: this hook is a backstop against mistakes, not a security boundary.
 set -e
 if command -v agent-skills >/dev/null 2>&1; then
-  exec agent-skills audit
+  CLI=agent-skills
 elif command -v skill >/dev/null 2>&1; then
-  exec skill audit
+  CLI=skill
 else
   echo "pre-commit: agent-skills not on PATH — run the CLI's install.sh" >&2
   exit 1
 fi
+
+"$CLI" audit
+exec "$CLI" doctor --repo
