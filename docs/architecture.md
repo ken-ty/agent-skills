@@ -187,6 +187,19 @@ copy モードで入ってしまった場合は事後的に気づける。
 自作スキルは lock に載らないので、自動的に git の対象として残る。gitignore を手で
 管理する必要がなく、「lock に足したのに ignore し忘れた」が起きない。
 
+### gitignore には穴がある — `sync` 前の `git add -A`
+
+`skills/.gitignore` を書くのは `sync` なので、`npx skills add` から次の `sync` までの間、
+新しい remote 実体は**まだ ignore されていない**。この窓で `git add -A` すると実体が index に入る。
+
+厄介なのは、一度 track された path には **.gitignore が効かなくなる**ことだ。あとから `sync` が
+ignore リストを書き直しても手遅れで、他人のスキルの写しが store に居座り続ける。しかも
+「git がそれを保持している」という記録はどこにも残らない。
+
+塞ぐ手段が無いので（`npx skills` の実行タイミングは制御できない）、`doctor` が
+`git ls-files -- skills/<remote>` で追跡状態を直接見て BAD にする。commit の内容そのものなので
+`--repo` モード＝ pre-commit でも走る — **commit こそが被害の発生点**だからだ。
+
 ## catalog.json: 来歴を画一的にする層
 
 配布された zip、社内共有、既に消えたリポジトリからの写し — 自作ではないが `npx skills`

@@ -23,9 +23,11 @@
 
 ## 着手可能
 
-| # | 内容 | サイズ | 出所 |
-| --- | --- | --- | --- |
-| 4 | ★4 `doctor` に remote 実体の git 追跡検出を足す（G5）。`npx skills add` 後 `sync` 前に `git add -A` すると remote 実体が追跡されるが、現状誰も検出しない | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+（空）**S サイズのバックログは尽きた。**
+
+次のサイクルは実装ではなく、下の「要分割」から 1 件を選んで **S に割る提案を issue へコメントする**
+ところまでをやる。割った結果をこの表に書き戻してから、その次のサイクルで着手する。
+新しいタスクをでっち上げないこと。
 
 ## 要分割（そのままでは 1 サイクルに収まらない）
 
@@ -56,3 +58,4 @@
 | 2026-07-29 | `doctor` が hook の内容 drift を BAD として検出するようになった（`hookDrift()`、[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
 | 2026-07-29 | ★2 pre-commit が `audit` に加えて `doctor --repo` を実行するようになった。catalog とズレた commit を止める（[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
 | 2026-07-29 | `doctor` が実行ツリーの `.claude/skills` と store の同名衝突を BAD として検出するようになった（[#11](https://github.com/ken-ty/agent-skills/issues/11) の選択肢 4） |
+| 2026-07-29 | ★4 `doctor` が remote 実体の git 追跡を BAD として検出するようになった。`--repo` でも走る（[#8](https://github.com/ken-ty/agent-skills/issues/8)） |

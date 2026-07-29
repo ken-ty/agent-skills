@@ -63,6 +63,26 @@ export function gitToplevel(cwd: string = process.cwd()): string | null {
   return r.status === 0 && top !== "" ? top : null;
 }
 
+/**
+ * Files git currently tracks under any of `paths`, repo-relative. Null when the
+ * query could not run at all (no git, not a repo) — which is not the same
+ * answer as "nothing is tracked", and callers must not conflate them.
+ *
+ * `-z` for the same reason `audit` needs it: without it `core.quotePath` prints
+ * a non-ASCII path octal-escaped, and a skill named in Japanese would silently
+ * drop out of the result.
+ */
+export function gitTrackedUnder(cwd: string, paths: string[]): string[] | null {
+  if (paths.length === 0) return [];
+  const r = spawnSync("git", ["ls-files", "-z", "--", ...paths], {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (r.status !== 0) return null;
+  return (r.stdout ?? "").split("\0").filter((s) => s !== "");
+}
+
 /** Current `core.hooksPath` for the repo at `cwd`, or null when unset. Read-only. */
 export function gitHooksPath(cwd: string): string | null {
   const r = spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd, encoding: "utf8" });
