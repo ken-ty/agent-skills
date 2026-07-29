@@ -8,9 +8,11 @@ import path from "node:path";
 import {
   AGENT_SKILL_DIRS,
   HOOKS_DIR_NAME,
+  HOOK_TEMPLATE,
   SKILL_KINDS,
   type Catalog,
   gitHooksPath,
+  hookDrift,
   inspectLink,
   links,
   presentSkillNames,
@@ -77,6 +79,10 @@ function checkStore(): string | null {
  * The pre-commit audit only runs where the store's core.hooksPath points at
  * hooks/. That is repo-local config, so a fresh clone starts unprotected until
  * `agent-skills link`.
+ *
+ * Presence is not enough: the hook is a *copy* of the tool's template taken at
+ * link time, and nothing re-copies it. A store linked before the template
+ * changed silently keeps running the old hook, so the contents are compared too.
  */
 function checkHooks(store: string): void {
   console.log("hooks");
@@ -90,11 +96,34 @@ function checkHooks(store: string): void {
   } else if (!fs.existsSync(hook)) {
     bad(`${HOOKS_DIR_NAME}/pre-commit is missing — run \`agent-skills link\``);
   } else {
+    // Both facts are worth reporting, so neither short-circuits the other: an
+    // outdated hook and a non-executable one have different fixes.
+    let executable = true;
     try {
       fs.accessSync(hook, fs.constants.X_OK);
-      ok(`pre-commit audit active (core.hooksPath=${HOOKS_DIR_NAME}/)`);
     } catch {
+      executable = false;
       bad(`${HOOKS_DIR_NAME}/pre-commit is not executable — \`chmod +x ${tilde(hook)}\``);
+    }
+
+    switch (hookDrift(hook)) {
+      case "drifted":
+        bad(
+          `${HOOKS_DIR_NAME}/pre-commit differs from the tool's template ` +
+            `(${tilde(HOOK_TEMPLATE)}) — run \`agent-skills link\` to reinstall it`,
+        );
+        break;
+      case "unreadable":
+        bad(
+          `cannot read ${tilde(hook)} or ${tilde(HOOK_TEMPLATE)} to compare them — ` +
+            "check permissions, then run `agent-skills link`",
+        );
+        break;
+      case "matches":
+        if (executable) {
+          ok(`pre-commit audit active (core.hooksPath=${HOOKS_DIR_NAME}/), matches the tool's template`);
+        }
+        break;
     }
   }
   console.log("");

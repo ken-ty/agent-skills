@@ -56,6 +56,28 @@ export function gitHooksPath(cwd: string): string | null {
   return r.status === 0 && v !== "" ? v : null;
 }
 
+/**
+ * Whether a store's installed hook still matches the template it came from.
+ *
+ * `link` copies HOOK_TEMPLATE into the store once; nothing re-copies it. So a
+ * store linked before the tool changed its template keeps running the old hook
+ * forever, and its existence check keeps passing — which is why `doctor`
+ * compares contents rather than just presence.
+ */
+export type HookDrift = "matches" | "drifted" | "unreadable";
+
+export function hookDrift(installed: string, template: string = HOOK_TEMPLATE): HookDrift {
+  try {
+    // Byte-for-byte: the template is the only supported content, so any edit is
+    // drift. Hand-customising the hook is not a use case `link` preserves.
+    return fs.readFileSync(installed, "utf8") === fs.readFileSync(template, "utf8")
+      ? "matches"
+      : "drifted";
+  } catch {
+    return "unreadable";
+  }
+}
+
 export const HOME: string = homedir();
 export const AGENTS_DIR: string = path.join(HOME, ".agents");
 export const AGENTS_SKILLS: string = path.join(AGENTS_DIR, "skills");
