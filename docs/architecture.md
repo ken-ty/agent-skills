@@ -273,6 +273,23 @@ copy モードで入ってしまった場合は事後的に気づける。
   指示なので repoint する。symlink は実体を持たないので安全（実ディレクトリは上の退避ルール）。
   張り替え前の向き先はログに出す
 
+### project スキルの衝突は「検出」で対処する
+
+優先順位が **personal > project** である以上、global store に同名があればプロジェクト側は
+読まれない。これをツール側で解決する手段は原理的に無い（順序を決めているのは Claude Code）。
+`plugin-name:skill-name` の名前空間なら衝突しないが、プラグイン化は
+[#10](https://github.com/ken-ty/agent-skills/issues/10) で採らないと決めた。
+
+残るのは**気づけるようにすること**だけなので、`doctor` が実行したツリーの `.claude/skills` を
+見て BAD にする（[#11](https://github.com/ken-ty/agent-skills/issues/11) の選択肢 4）。
+
+- **BAD であって warn ではない** — 「プロジェクト固有として置いたスキルが読まれていない」は
+  症状の出ない不具合そのもの。store 側が健全でも、意図した構成にはなっていない
+- **既知プロジェクトの一覧は持たない** — 管轄を skills 限定にした
+  （[#9](https://github.com/ken-ty/agent-skills/issues/9)）以上、プロジェクト台帳は増やさない。
+  `audit` と同じく「呼ばれた場所」を見るだけにする
+- **`.claude/skills` が無くても 1 行出す** — 「見ていない」と「見て問題が無かった」を混同させない
+
 ### pre-commit は「呼ばれたリポジトリ」を見る
 
 `audit` も `doctor --repo` も、config に記録された store ではなく

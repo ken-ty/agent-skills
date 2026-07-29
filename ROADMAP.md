@@ -25,7 +25,6 @@
 
 | # | 内容 | サイズ | 出所 |
 | --- | --- | --- | --- |
-| 3 | `doctor` に global store と project `.claude/skills` の同名衝突検出を足す。personal が project に勝つため、プロジェクト固有として置いたスキルが黙って無視される | S | [#11](https://github.com/ken-ty/agent-skills/issues/11) |
 | 4 | ★4 `doctor` に remote 実体の git 追跡検出を足す（G5）。`npx skills add` 後 `sync` 前に `git add -A` すると remote 実体が追跡されるが、現状誰も検出しない | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
 
 ## 要分割（そのままでは 1 サイクルに収まらない）
@@ -56,3 +55,4 @@
 | 2026-07-29 | `audit` と `push` に gitleaks の optional 併用を実装（`scripts/lib/gitleaks.ts`）。未導入・起動失敗はブロックしない（[#9](https://github.com/ken-ty/agent-skills/issues/9)） |
 | 2026-07-29 | `doctor` が hook の内容 drift を BAD として検出するようになった（`hookDrift()`、[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
 | 2026-07-29 | ★2 pre-commit が `audit` に加えて `doctor --repo` を実行するようになった。catalog とズレた commit を止める（[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
+| 2026-07-29 | `doctor` が実行ツリーの `.claude/skills` と store の同名衝突を BAD として検出するようになった（[#11](https://github.com/ken-ty/agent-skills/issues/11) の選択肢 4） |
