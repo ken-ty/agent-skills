@@ -54,7 +54,7 @@ audit フックを設置する。
 | `agent-skills list` | store のスキルを kind ごとに一覧 (read-only) |
 | `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成 |
 | `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・各エージェントの配線を検査 (read-only) |
-| `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル) |
+| `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 
 `npm run <cmd>` でも同じものが動く（リポジトリ内でのみ）。`agent-skills`/`skill` はどこからでも。
@@ -154,6 +154,32 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
 
 `devDependencies` の TypeScript は `npm run typecheck` 専用（型ストリップは型検査をしないため。
 これだけは `npm install` が要る）。
+
+### gitleaks があれば秘密検査を強化する（任意）
+
+`audit` と `push` の秘密スキャンは、[gitleaks](https://github.com/gitleaks/gitleaks) が PATH に
+あれば自動で併用する。組み込みのルールは手書きの短いリストなので、入れておくと検出範囲が広がる:
+
+```bash
+brew install gitleaks
+```
+
+**入れなくても動く。必須依存にはしない**（[#9](https://github.com/ken-ty/agent-skills/issues/9) の決定）。
+そのため挙動は次の通り:
+
+- **入っていない** … 組み込みスキャンのみ。問題として扱わない
+- **入っていて壊れている**（設定エラー等で起動に失敗）… 警告だけ出して**続行する**。ここで止めると
+  「壊れた gitleaks が全 commit をブロックする」＝実質必須依存になってしまうため
+- **入っていて検出した** … 組み込みの検出と同じ扱いでブロックする。`audit-ignore` の
+  escape hatch も同じように効く
+
+`audit` の出力末尾がどちらで検査したかを必ず書くので、「clean」が片方だけの検査だったのか
+両方だったのかを取り違えない:
+
+```text
+audit: 21 file(s) clean (built-in only — gitleaks not on PATH)
+audit: 21 file(s) clean (built-in + gitleaks)
+```
 
 ## 対応待ちは issue にある
 
