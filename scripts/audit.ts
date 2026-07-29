@@ -21,6 +21,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { runGitleaks } from "./lib/gitleaks.ts";
 import {
   ALLOW,
   type Finding,
@@ -87,6 +88,7 @@ function main(): void {
   const findings: Finding[] = [];
   const forbidden: string[] = [];
   const unreadable: string[] = [];
+  const examined = new Map<string, string>();
 
   for (const file of files) {
     if (isForbiddenPath(file)) {
@@ -100,16 +102,32 @@ function main(): void {
       unreadable.push(file);
       continue;
     }
+    examined.set(file, text);
     findings.push(...scan(file, text));
   }
 
+  // Second opinion, only if gitleaks happens to be installed. Handed the same
+  // content that was just scanned, so both scanners judge identical bytes.
+  const leaks = runGitleaks(examined);
+  if (leaks.kind === "ran") findings.push(...leaks.findings);
+
+  // Say which scanners looked, always. "clean" from one scanner and "clean"
+  // from two are different claims, and the reader cannot tell them apart from
+  // the file count alone.
+  const coverage =
+    leaks.kind === "ran"
+      ? "built-in + gitleaks"
+      : leaks.kind === "absent"
+        ? "built-in only — gitleaks not on PATH"
+        : `built-in only — gitleaks failed: ${leaks.reason}`;
+
   const problems = forbidden.length + findings.length + unreadable.length;
   if (problems === 0) {
-    console.log(`audit: ${files.length} file(s) clean`);
+    console.log(`audit: ${files.length} file(s) clean (${coverage})`);
     return;
   }
 
-  console.error(`audit: BLOCKED — ${problems} problem(s)\n`);
+  console.error(`audit: BLOCKED — ${problems} problem(s) (${coverage})\n`);
 
   for (const file of forbidden) {
     console.error(`  ${file}`);

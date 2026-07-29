@@ -28,6 +28,7 @@ import {
   storeSkills,
   tilde,
 } from "./lib/paths.ts";
+import { runGitleaks } from "./lib/gitleaks.ts";
 import { type Finding, isForbiddenPath, reportFindings, scan } from "./lib/secrets.ts";
 
 const API_BASE = "https://api.anthropic.com/v1/skills";
@@ -146,6 +147,7 @@ function preparePayload(name: string): Payload | null {
   const findings: Finding[] = [];
   const forbidden: string[] = [];
   const unreadable: string[] = [];
+  const examined = new Map<string, string>();
   for (const f of files) {
     if (isForbiddenPath(f.rel)) {
       forbidden.push(f.rel);
@@ -160,7 +162,15 @@ function preparePayload(name: string): Payload | null {
       unreadable.push(f.rel);
       continue;
     }
+    examined.set(`${name}/${f.rel}`, text);
     findings.push(...scan(`${name}/${f.rel}`, text));
+  }
+  // Same optional second opinion the commit guard gets. Leaving it out here
+  // would make the sentence above false: upload would become the weaker gate.
+  const leaks = runGitleaks(examined);
+  if (leaks.kind === "ran") findings.push(...leaks.findings);
+  if (leaks.kind === "failed") {
+    console.error(`  ${name}: gitleaks failed (${leaks.reason}) — built-in scan still applied`);
   }
   if (forbidden.length > 0 || unreadable.length > 0 || findings.length > 0) {
     console.error(`  ${name}: BLOCKED — will not upload`);

@@ -25,11 +25,10 @@
 
 | # | 内容 | サイズ | 出所 |
 | --- | --- | --- | --- |
-| 1 | `agent-skills audit` に gitleaks の optional 併用を実装する。`command -v gitleaks` があれば併用し、無ければ現行の `scripts/lib/secrets.ts` にフォールバック。必須依存にはしない | S | [#9](https://github.com/ken-ty/agent-skills/issues/9) |
-| 2 | `doctor` に hook の内容 drift 検出を足す。現状 `checkHooks` は存在と実行可能しか見ておらず、テンプレートを変えても既存 store は古い hook を持ち続ける。★2 の前提 | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
-| 3 | ★2 pre-commit で `doctor` も実行し、catalog とズレたままの commit を止める（G3）。**項目 2 の完了後に着手する** | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
-| 4 | `doctor` に global store と project `.claude/skills` の同名衝突検出を足す。personal が project に勝つため、プロジェクト固有として置いたスキルが黙って無視される | S | [#11](https://github.com/ken-ty/agent-skills/issues/11) |
-| 5 | ★4 `doctor` に remote 実体の git 追跡検出を足す（G5）。`npx skills add` 後 `sync` 前に `git add -A` すると remote 実体が追跡されるが、現状誰も検出しない | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+| 1 | `doctor` に hook の内容 drift 検出を足す。現状 `checkHooks` は存在と実行可能しか見ておらず、テンプレートを変えても既存 store は古い hook を持ち続ける。★2 の前提 | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+| 2 | ★2 pre-commit で `doctor` も実行し、catalog とズレたままの commit を止める（G3）。**項目 1 の完了後に着手する** | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
+| 3 | `doctor` に global store と project `.claude/skills` の同名衝突検出を足す。personal が project に勝つため、プロジェクト固有として置いたスキルが黙って無視される | S | [#11](https://github.com/ken-ty/agent-skills/issues/11) |
+| 4 | ★4 `doctor` に remote 実体の git 追跡検出を足す（G5）。`npx skills add` 後 `sync` 前に `git add -A` すると remote 実体が追跡されるが、現状誰も検出しない | S | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
 
 ## 要分割（そのままでは 1 サイクルに収まらない）
 
@@ -56,3 +55,4 @@
 | 2026-07-29 | [#10](https://github.com/ken-ty/agent-skills/issues/10) plugin 化を見送り、claude.ai 削除は #13 待ちで保留と決定 |
 | 2026-07-29 | [#9](https://github.com/ken-ty/agent-skills/issues/9) 管轄は skills 限定と決定し close。audit は gitleaks を optional 併用 |
 | 2026-07-29 | README / `docs/architecture.md` / `doctor` のサーフェス記述を 5 サーフェスに正確化。Cowork は plugin でも届かないことと、plugin 化しない決定を反映（[#10](https://github.com/ken-ty/agent-skills/issues/10)） |
+| 2026-07-29 | `audit` と `push` に gitleaks の optional 併用を実装（`scripts/lib/gitleaks.ts`）。未導入・起動失敗はブロックしない（[#9](https://github.com/ken-ty/agent-skills/issues/9)） |

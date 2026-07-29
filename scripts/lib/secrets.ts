@@ -66,7 +66,17 @@ export const RULES: ReadonlyArray<Rule> = [
 /** Paths that should never leave the store, regardless of content. */
 export const FORBIDDEN_PATHS = [/(^|\/)\.env(\.|$)/, /(^|\/)id_(rsa|ed25519)$/, /\.pem$/, /\.p12$/];
 
-export type Finding = { file: string; line: number; rule: Rule; match: string };
+/**
+ * `rule` is narrowed to what reporting actually needs, not to `Rule`, so a
+ * finding from another scanner (see lib/gitleaks.ts) can be reported through
+ * the same path. A `Rule` still satisfies it.
+ */
+export type Finding = {
+  file: string;
+  line: number;
+  rule: { id: string; why: string };
+  match: string;
+};
 
 /** Never print a match in full — the report itself would become a leak. */
 export function redact(s: string): string {
