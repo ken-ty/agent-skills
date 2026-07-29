@@ -30,17 +30,25 @@
 ただし **Q1「`add` は git 操作をするか」/ Q2「own・vendored の symlink を誰が張るか」の回答待ち**なので、
 まだこの表には書き戻していない。回答が付いたら S-A 〜 S-D をここへ移す。
 
-`/loop` はそれまで**サイクルをスキップする**。新しいタスクをでっち上げないこと。
-項目 8（★5）は未分割なので、先に手を付けるならそちらの分割提案から。
+項目 8（★5）の分割案も
+[#8 にコメント済み](https://github.com/ken-ty/agent-skills/issues/8#issuecomment-5117573009)。
+実測したところ `~/.claude/skills` の 15 件は全て symlink で、allowlist の想定対象だった
+`unity-mcp-skill` は既に `vendored` として取り込み済みだった。**allowlist に入れるべきものが 0 件**
+なので S 1 件（S-E）に落ちる見込みだが、**Q3「allowlist を作らずに済ませてよいか」/ Q4「格上げの温度感」**
+の回答待ち。
+
+**要分割の 2 件はどちらも提案済み・回答待ち。`/loop` はサイクルをスキップすること。**
+新しいタスクをでっち上げない。回答が付いたら S-A 〜 S-E をこの表へ移す。
 
 ## 要分割（そのままでは 1 サイクルに収まらない）
 
 | # | 内容 | サイズ | 出所 |
 | --- | --- | --- | --- |
 | 7 | ★3 `agent-skills add` を新設し、全 kind で「実体用意 → catalog 追記 → sync → doctor」を原子化する（G1、#8 の本命） | M | [#8](https://github.com/ken-ty/agent-skills/issues/8) |
-| 8 | ★5 copy モードで `~/.claude` に入った実体を bad 相当にする（G4）。`unity-mcp-skill` のように外部ツールが直接書くケースがあるため allowlist が要る | M | [#8](https://github.com/ken-ty/agent-skills/issues/8), [#11](https://github.com/ken-ty/agent-skills/issues/11) |
+| 8 | ★5 copy モードで `~/.claude` に入った実体を bad 相当にする（G4）。allowlist が要るかは実測の結果 [再検討中](https://github.com/ken-ty/agent-skills/issues/8#issuecomment-5117573009)（S 1 件に落ちる見込み） | M→S? | [#8](https://github.com/ken-ty/agent-skills/issues/8), [#11](https://github.com/ken-ty/agent-skills/issues/11) |
 
-拾う場合は、まず S に割る提案を issue へコメントしてから着手する。
+拾う場合は、まず S に割る提案を issue へコメントしてから着手する。**両件とも提案済みなので、
+次にやるのは提案ではなく回答待ち。**
 
 ## ブロック中（loop は拾わない）
 
