@@ -23,7 +23,13 @@ export const STORE_ENV = "AGENT_SKILLS_STORE";
 export const CONFIG_DIR: string = path.join(homedir(), ".config", "agent-skills");
 export const CONFIG_PATH: string = path.join(CONFIG_DIR, "config.json");
 
-export type Config = { store: string };
+/**
+ * `shareRepo` is the public repo `agent-skills share` pushes to, as `owner/repo`.
+ * Optional: sharing is opt-in, and a store works fine without ever handing a
+ * skill to anyone. Kept here rather than in the store so the store stays unaware
+ * of where its skills get distributed.
+ */
+export type Config = { store: string; shareRepo?: string };
 
 /** Read the config file. Returns null when absent or unparseable. */
 export function readConfig(): Config | null {
@@ -61,6 +67,17 @@ export function resolveStoreOrNull(): string | null {
   if (env !== undefined && env.trim() !== "") return path.resolve(env);
   const cfg = readConfig();
   return cfg?.store !== undefined && cfg.store !== "" ? path.resolve(cfg.store) : null;
+}
+
+export const SHARE_REPO_ENV = "AGENT_SKILLS_SHARE_REPO";
+
+/** Configured share repo (`owner/repo`), env over config, or null when unset. */
+export function resolveShareRepoOrNull(): string | null {
+  const env = process.env[SHARE_REPO_ENV];
+  if (env !== undefined && env.trim() !== "") return env.trim();
+  const cfg = readConfig();
+  const v = cfg?.shareRepo;
+  return v !== undefined && v.trim() !== "" ? v.trim() : null;
 }
 
 /** Configured store path, or throw with the fix. Use where a store is required. */

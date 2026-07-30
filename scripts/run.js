@@ -15,7 +15,7 @@
  * `npm install`, and these scripts deliberately need no install.
  */
 const MIN = "22.18.0";
-const SCRIPTS = ["init", "link", "sync", "doctor", "audit", "list", "push"];
+const SCRIPTS = ["init", "link", "sync", "doctor", "audit", "list", "push", "share"];
 
 /** Compare dotted versions numerically. parseInt drops tags like "-nightly". */
 function isOlder(actual, min) {

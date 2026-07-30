@@ -22,6 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   type Catalog,
+  frontmatter,
   namesOfKind,
   presentSkillNames,
   readCatalog,
@@ -77,10 +78,7 @@ type Payload = { dir: string; apiName: string; files: SkillFile[]; bytes: number
  * directory name would be rejected.
  */
 function frontmatterName(skillMd: string): string | null {
-  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(skillMd);
-  if (fm === null) return null;
-  const line = /^name:\s*(.+?)\s*$/m.exec(fm[1] ?? "");
-  return line?.[1]?.replace(/^["']|["']$/g, "") ?? null;
+  return frontmatter(skillMd).name ?? null;
 }
 
 /** Every file under a skill dir, as paths relative to that dir. */

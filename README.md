@@ -56,6 +56,7 @@ audit フックを設置する。
 | `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
+| `agent-skills share <name>` | スキルを 1 本だけ**外部の人に渡す**。既定は期限つきの一時共有、`--keep` で恒久共有 (`--dry-run` 可) |
 
 `npm run <cmd>` でも同じものが動く（リポジトリ内でのみ）。`agent-skills`/`skill` はどこからでも。
 
@@ -143,7 +144,35 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
 
 store も `agent-skills` も持っていない人に、URL 1 つで渡す。配布面は
 [ken-ty/agent-skills-share](https://github.com/ken-ty/agent-skills-share)（public）。
-手順は store の **`share-agent-skill`** スキルにある（[#24](https://github.com/ken-ty/agent-skills/issues/24)）。
+判断を含む手順は store の **`share-agent-skill`** スキルにある（[#24](https://github.com/ken-ty/agent-skills/issues/24)）。
+
+```bash
+agent-skills share ghq                # 一時共有（既定）。7 日後の日付が branch 名に入る
+agent-skills share ghq --days 30      # 期限を変える
+agent-skills share ghq --keep         # 恒久共有。既にあれば更新になる
+agent-skills share ghq --dry-run      # 何を publish するか見るだけ
+```
+
+出力の最後に、そのまま相手へ送れる 1 行が出る:
+
+```text
+Published:
+  https://github.com/ken-ty/agent-skills-share/tree/share-ghq-20260806/ghq
+
+Send them this:
+  npx skills add https://github.com/ken-ty/agent-skills-share/tree/share-ghq-20260806/ghq
+```
+
+**配布先は `~/.config/agent-skills/config.json` の `shareRepo`**（`"<owner>/<repo>"`）。
+`AGENT_SKILLS_SHARE_REPO` か `--repo` でも指定できる。store の設定とは別なので、共有しない運用なら
+設定しなくてよい。
+
+`share` が publish の前に断るもの:
+
+- **`kind: remote`** … 相手は元のリポジトリから直接取れる。写しを配ると出自が隠れるだけ
+- **`kind: own` でも catalog に無い** … 出自の記録が無いものを人に渡さない
+- **`kind: vendored`** … 再配布はライセンス次第。確認したうえで `--force`
+- **秘密・マシン固有情報** … `audit` と同じ検査を publish 直前に流す。publish は取り消せない
 
 ```text
 agent-skills ──操作──▶ agent-skills-store ──切り出し──▶ agent-skills-share ──▶ 他人
