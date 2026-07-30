@@ -16,6 +16,51 @@ chezmoi / yadm と同じ構図で、ツールは誰でも使え、データは�
 - 以降この文書で「store」と書くのはデータリポジトリを指す。`catalog.json` / `skills.lock` /
   `skills/` はすべて store の持ち物で、ツールはそれらを外から検査・配線する。
 
+### 3 層目: 配布面（`agent-skills-share`）
+
+store のスキルを 1 本だけ外部の人に渡すための public リポジトリ
+（[#24](https://github.com/ken-ty/agent-skills/issues/24)）。手順は store の
+`share-agent-skill` スキルにある。
+
+```text
+agent-skills ──操作──▶ agent-skills-store ──切り出し──▶ agent-skills-share ──▶ 他人
+```
+
+**依存は一方向で、逆向きの参照が 1 つも無いことが要件。**
+
+- **share は store を知らない。** 置いてあるのは `<name>/SKILL.md` + `references/` だけで、
+  `catalog.json` も `skills.lock` も無い。受け取る側に `agent-skills` は要らない
+- **store は share を知らない。** `catalog.json` に「共有中」は書かない。それは出自ではなく
+  **配布状態**であり、書いた瞬間に SSOT が外部配布の都合を抱え込む
+- **切り出しは同期ではない。** 一方向のコピー。恒久共有の更新は「もう一度コピーする」であって、
+  差分追跡ではない
+
+**配布面はサーフェスではない。** 5 サーフェスは「自分のスキルがどこで動くか」を数えたもので、
+これは「他人に渡す」。`doctor` の surfaces セクションにも出さない。
+
+#### state を持たない
+
+一時共有の期限は**ブランチ名に埋める**（`share-<name>-<expiry>`）。ローカルに台帳を置くと
+GitHub 側のブランチ一覧と二重帳簿になり、「どちらが正しいか」を判定する仕組みがさらに要る。
+真実は GitHub にあるので、そこに聞けばよい:
+
+```bash
+gh api repos/ken-ty/agent-skills-share/branches --jq '.[].name'
+```
+
+同じ理由で `doctor` に共有の検査を足さない。`doctor` はこのマシンの配線を見る道具であり、
+外部リポジトリの状態は管轄外。
+
+#### 一時共有が提供するのは「期限」であって「秘匿」ではない
+
+public リポジトリのブランチは誰でも列挙できる。また、ブランチを削除しても
+**commit SHA を控えた人は `tree/<sha>/` で読み続けられる**（GitHub が unreachable commit を
+しばらく保持するため）。撤回が閉じるのは install 経路だけで、消去ではない。
+
+したがって渡す URL には**必ずブランチ名を使う**。SHA は `npx skills` の
+`git clone --depth 1 --branch <ref>` が受け付けないので install できず、しかも撤回が効かない。
+見せたくないものは private リポジトリ + collaborator 招待の領域で、この仕組みの対象外。
+
 ## 設計
 
 ```mermaid
