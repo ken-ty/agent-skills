@@ -139,6 +139,37 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
   実体が git に追跡され、以後 gitignore が効かなくなる（`doctor` が BAD で検出する）。
 - **vendored** … 実体を `skills/<name>/` に置く → `catalog.json` に `kind: vendored`（`origin` 必須）→ commit。
 
+## スキルを 1 本だけ人に渡す
+
+store も `agent-skills` も持っていない人に、URL 1 つで渡す。配布面は
+[ken-ty/agent-skills-share](https://github.com/ken-ty/agent-skills-share)（public）。
+手順は store の **`share-agent-skill`** スキルにある（[#24](https://github.com/ken-ty/agent-skills/issues/24)）。
+
+```text
+agent-skills ──操作──▶ agent-skills-store ──切り出し──▶ agent-skills-share ──▶ 他人
+   (tool)              (private, SSOT)              (public, 配布面)
+```
+
+**依存は一方向。** share は store を知らないし、store も share を知らない。切り出しは同期ではなく
+一方向のコピーなので、`catalog.json` に「共有中」は書かない ── 出自ではなく配布状態であり、
+書いた瞬間に store が外部配布を知ることになる。
+
+**これは 6 つ目のサーフェスではない。** 上の 5 つは「自分のスキルがどこで動くか」の話で、
+これは「他人に渡す」。別の関心事なので `doctor` の surfaces にも出さない。
+
+| | 一時共有 | 恒久共有 |
+| --- | --- | --- |
+| 置き場 | orphan branch `share-<name>-<expiry>` | `main` の `<name>/` |
+| URL | `tree/share-<name>-<expiry>/<name>` | `tree/main/<name>` |
+| 撤回 | ブランチ削除 | フォルダ削除 |
+
+受け取る側から見た使い方は同じ。どちらも `npx skills add <URL>` で入り、URL を開けば読める。
+**ローカルに台帳は持たない** — 期限はブランチ名に埋め、生きている共有は GitHub に聞く。
+
+渡す URL には**必ずブランチ名を使う**。commit SHA は `npx skills` が受け付けない上
+（`--depth 1 --branch` のため）、ブランチを消しても SHA を知る人は読み続けられる。
+制約の詳細は `share-agent-skill` を参照。
+
 ## 設計
 
 ```text
