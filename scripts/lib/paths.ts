@@ -315,6 +315,25 @@ export function presentSkillNames(dir: string = storeSkills()): string[] {
     .sort();
 }
 
+/**
+ * Top-level scalar fields of a SKILL.md YAML frontmatter block.
+ *
+ * Deliberately not a YAML parser: skill frontmatter is a handful of `key: value`
+ * lines, and pulling in a dependency for that would break the "Node and nothing
+ * else" requirement. Nested structures and multi-line values are not read.
+ */
+export function frontmatter(text: string): Record<string, string> {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  if (fm === null) return {};
+  const out: Record<string, string> = {};
+  for (const line of (fm[1] ?? "").split(/\r?\n/)) {
+    const kv = /^([A-Za-z][\w-]*):\s*(.*?)\s*$/.exec(line);
+    if (kv === null) continue;
+    out[kv[1]!] = (kv[2] ?? "").replace(/^["']|["']$/g, "");
+  }
+  return out;
+}
+
 /** Render an absolute path with `~` for readable output. */
 export function tilde(p: string): string {
   return p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p;

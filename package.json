@@ -15,6 +15,7 @@
     "doctor": "node scripts/run.js doctor",
     "audit": "node scripts/run.js audit",
     "push": "node scripts/run.js push",
+    "share": "node scripts/run.js share",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

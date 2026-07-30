@@ -25,8 +25,7 @@
 
 | # | 内容 | サイズ | 出所 |
 | --- | --- | --- | --- |
-| 9 | `agent-skills share <name> --temp/--keep` を実装する。**ステートレス**（切り出す → push → URL を返す）。台帳も `doctor` 連携も作らない。手順は store の `share-agent-skill` にある | S | [#24](https://github.com/ken-ty/agent-skills/issues/24) |
-| 10 | `agent-skills share --gc` … `share-<name>-<expiry>` の日付が過ぎたブランチを消す。**項目 9 の完了後に着手する** | S | [#24](https://github.com/ken-ty/agent-skills/issues/24) |
+| 10 | `agent-skills share --gc` … `share-<name>-<expiry>` の日付が過ぎたブランチを消す | S | [#24](https://github.com/ken-ty/agent-skills/issues/24) |
 
 以下は回答待ちのため、まだこの表に無い。
 
@@ -76,4 +75,5 @@
 | 2026-07-29 | ★2 pre-commit が `audit` に加えて `doctor --repo` を実行するようになった。catalog とズレた commit を止める（[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
 | 2026-07-29 | `doctor` が実行ツリーの `.claude/skills` と store の同名衝突を BAD として検出するようになった（[#11](https://github.com/ken-ty/agent-skills/issues/11) の選択肢 4） |
 | 2026-07-29 | ★4 `doctor` が remote 実体の git 追跡を BAD として検出するようになった。`--repo` でも走る（[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
+| 2026-07-30 | `agent-skills share <name> [--keep]` を実装。ステートレスで、publish 直前に kind と秘密を検査する（[#24](https://github.com/ken-ty/agent-skills/issues/24)） |
 | 2026-07-30 | 配布面 `ken-ty/agent-skills-share` を作り、store に `share-agent-skill`（手順書）を追加（[#24](https://github.com/ken-ty/agent-skills/issues/24)、store [#11](https://github.com/ken-ty/agent-skills-store/pull/11)） |
