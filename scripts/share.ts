@@ -43,20 +43,26 @@ type Repo = { owner: string; repo: string };
 const OPTS_WITH_VALUE = new Set(["--days", "--hours", "--repo"]);
 
 /**
- * The expiry a temporary share carries, as `YYYYMMDD-HHmmJST`.
+ * The expiry a temporary share carries, as `--expire-at-<YYYYMMDD>-<HHmm>-JST`.
  *
- * JST is in the name on purpose. The gc that reads this back runs on a UTC
- * machine, and an unlabelled timestamp is exactly the kind of thing that gets
- * compared in the wrong zone once and then silently stays wrong. Minutes, no
- * seconds: the point is to stop a "1 day" share from dying at an arbitrary
- * hour, not to hit an instant.
+ * The branch name is the only record of when a share should go, so it is
+ * written to be read by a person who has never seen this code: `--expire-at-`
+ * says what the number means, and the double dash separates it from a skill
+ * name that may itself contain dashes and digits. The gc anchors on that
+ * literal rather than on "digits near the end".
+ *
+ * JST is in the name on purpose. The gc runs on a UTC machine, and an
+ * unlabelled timestamp is exactly the kind of thing that gets compared in the
+ * wrong zone once and then silently stays wrong. Minutes, no seconds: the
+ * point is to stop a "1 day" share from dying at an arbitrary hour, not to hit
+ * an instant.
  */
-function jstStamp(at: Date): { ref: string; human: string } {
+function expireAt(at: Date): { suffix: string; human: string } {
   // JST has no DST, so a fixed +9h shift is exact.
   const t = new Date(at.getTime() + 9 * 3_600_000).toISOString();
   const [date, time] = [t.slice(0, 10), t.slice(11, 16)];
   return {
-    ref: `${date.replace(/-/g, "")}-${time.replace(":", "")}JST`,
+    suffix: `--expire-at-${date.replace(/-/g, "")}-${time.replace(":", "")}-JST`,
     human: `${date} ${time} JST`,
   };
 }
@@ -291,7 +297,7 @@ function copySkill(from: string, to: string): void {
 function usage(): never {
   console.error("usage: agent-skills share <name> [--keep] [--days <n> | --hours <n>] [--repo <owner/repo>] [--force] [--dry-run]");
   console.error("");
-  console.error("  (default)   temporary share on an orphan branch whose name carries its expiry (JST, to the minute)");
+  console.error("  (default)   temporary share on an orphan branch named ...--expire-at-<YYYYMMDD>-<HHmm>-JST");
   console.error("  --keep      permanent share on the share repo's default branch");
   process.exit(1);
 }
@@ -343,9 +349,9 @@ function main(): void {
       // moment, not "some time on the next calendar day". A date alone left the
       // actual deletion anywhere inside a 24h window; the gc compares this
       // stamp, so the window is now the gc's own interval instead.
-      const stamp = jstStamp(new Date(Date.now() + days * 86_400_000 + hours * 3_600_000));
+      const stamp = expireAt(new Date(Date.now() + days * 86_400_000 + hours * 3_600_000));
       expiry = stamp.human;
-      ref = `share-${name}-${stamp.ref}`;
+      ref = `share-${name}${stamp.suffix}`;
 
       // No clone: an orphan share has no history to start from, and building it
       // in an empty repo is what makes it independent of every other share.
