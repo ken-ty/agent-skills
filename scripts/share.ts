@@ -392,9 +392,15 @@ function main(): void {
     console.log("Send them this:");
     console.log(`  npx skills add ${url}`);
     if (expiry !== null) {
-      console.log(`\nExpires ${expiry} — the share repo's gc workflow deletes it after that.`);
-      console.log("Deleting closes the install path; it does not take the copy back. To remove it now:");
-      console.log(`  gh api -X DELETE repos/${repo.owner}/${repo.repo}/git/refs/heads/${ref}`);
+      // Say when it actually goes, not when the name says it should. The gc is a
+      // 6-hourly sweep and GitHub delays scheduled runs, so "expires at X" alone
+      // would read as a guarantee it does not make.
+      console.log(`\nGoes away:  ${expiry}, give or take.`);
+      console.log("  The share repo sweeps every 6h and GitHub delays scheduled runs,");
+      console.log("  so expect it to linger up to ~7h past that. Tell them to install now.");
+      console.log("\n  Deleting only closes the install path — it does not take the copy back.");
+      console.log("  To remove it the moment they have it:");
+      console.log(`    gh api -X DELETE repos/${repo.owner}/${repo.repo}/git/refs/heads/${ref}`);
     }
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
