@@ -3,7 +3,8 @@
  *
  *   agent-skills share <name>              temporary — an orphan branch that expires
  *   agent-skills share <name> --keep       permanent — lives on the share repo's default branch
- *   agent-skills share <name> --days 30    how long a temporary share is meant to last
+ *   agent-skills share <name> --days 30    how long a temporary share lasts
+ *   agent-skills share <name> --hours 6    same, for shares meant to be taken now
  *
  * Pushes a copy of `skills/<name>/` to the configured share repo and prints a URL
  * that both reads in a browser and installs with `npx skills add`. The recipient
@@ -39,7 +40,26 @@ const END = "<!-- end managed -->";
 type Mode = "temp" | "keep";
 type Repo = { owner: string; repo: string };
 
-const OPTS_WITH_VALUE = new Set(["--days", "--repo"]);
+const OPTS_WITH_VALUE = new Set(["--days", "--hours", "--repo"]);
+
+/**
+ * The expiry a temporary share carries, as `YYYYMMDD-HHmmJST`.
+ *
+ * JST is in the name on purpose. The gc that reads this back runs on a UTC
+ * machine, and an unlabelled timestamp is exactly the kind of thing that gets
+ * compared in the wrong zone once and then silently stays wrong. Minutes, no
+ * seconds: the point is to stop a "1 day" share from dying at an arbitrary
+ * hour, not to hit an instant.
+ */
+function jstStamp(at: Date): { ref: string; human: string } {
+  // JST has no DST, so a fixed +9h shift is exact.
+  const t = new Date(at.getTime() + 9 * 3_600_000).toISOString();
+  const [date, time] = [t.slice(0, 10), t.slice(11, 16)];
+  return {
+    ref: `${date.replace(/-/g, "")}-${time.replace(":", "")}JST`,
+    human: `${date} ${time} JST`,
+  };
+}
 
 function parseArgs(argv: string[]): {
   flags: Set<string>;
@@ -186,7 +206,8 @@ function skillReadme(name: string, desc: string, url: string, expiry: string | n
           "- 元の store で更新したら、ここにも反映される",
         ]
       : [
-          `- 共有形態: **一時共有**。**${expiry} ごろに削除する**`,
+          `- 共有形態: **一時共有**。**${expiry} を過ぎたら削除される**`,
+          "- 消えたあとは入れられない。**先に入れておくこと**",
           "- 更新は来ない。必要なら手元に控えておくこと",
         ];
 
@@ -268,9 +289,9 @@ function copySkill(from: string, to: string): void {
 }
 
 function usage(): never {
-  console.error("usage: agent-skills share <name> [--keep] [--days <n>] [--repo <owner/repo>] [--force] [--dry-run]");
+  console.error("usage: agent-skills share <name> [--keep] [--days <n> | --hours <n>] [--repo <owner/repo>] [--force] [--dry-run]");
   console.error("");
-  console.error("  (default)   temporary share on an orphan branch that carries its expiry");
+  console.error("  (default)   temporary share on an orphan branch whose name carries its expiry (JST, to the minute)");
   console.error("  --keep      permanent share on the share repo's default branch");
   process.exit(1);
 }
@@ -280,8 +301,14 @@ function main(): void {
   if (name === undefined || rest.length > 1) usage();
 
   const mode: Mode = flags.has("--keep") ? "keep" : "temp";
-  const days = Number(opts.get("--days") ?? "7");
-  if (!Number.isInteger(days) || days < 1) fail("--days must be a positive whole number");
+  const hasDays = opts.has("--days");
+  const hasHours = opts.has("--hours");
+  if (hasDays && hasHours) fail("pass --days or --hours, not both");
+  const days = Number(opts.get("--days") ?? (hasHours ? "0" : "7"));
+  const hours = Number(opts.get("--hours") ?? "0");
+  if (!Number.isInteger(days) || days < 0) fail("--days must be a whole number of days");
+  if (!Number.isInteger(hours) || hours < 0) fail("--hours must be a whole number of hours");
+  if (days === 0 && hours === 0) fail("the share would expire immediately", "Pass --days or --hours.");
 
   const spec = opts.get("--repo") ?? resolveShareRepoOrNull();
   if (spec === null) {
@@ -312,12 +339,13 @@ function main(): void {
     let expiry: string | null = null;
 
     if (mode === "temp") {
-      // UTC, so an expiry set late in the day can read as one day early. The
-      // date is a human-facing intent ("delete around then"), not a deadline
-      // anything enforces, so that is close enough.
-      const until = new Date(Date.now() + days * 86_400_000);
-      expiry = until.toISOString().slice(0, 10);
-      ref = `share-${name}-${expiry.replace(/-/g, "")}`;
+      // Counted from now, to the minute: `--days 1` means 24 hours from this
+      // moment, not "some time on the next calendar day". A date alone left the
+      // actual deletion anywhere inside a 24h window; the gc compares this
+      // stamp, so the window is now the gc's own interval instead.
+      const stamp = jstStamp(new Date(Date.now() + days * 86_400_000 + hours * 3_600_000));
+      expiry = stamp.human;
+      ref = `share-${name}-${stamp.ref}`;
 
       // No clone: an orphan share has no history to start from, and building it
       // in an empty repo is what makes it independent of every other share.
