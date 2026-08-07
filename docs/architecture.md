@@ -136,8 +136,13 @@ flowchart BT
 太線の 2 本がツールの持ち物 (`~/.agents/` を store へ向ける)。`catalog.json` に `~/.agents/`
 からの矢印が無いのは、参照されない store 専用ファイルだからで、欠落ではない。
 
-自前で管理するのは config 1 つと `~/.agents/` 配下の **2 本の symlink だけ**。その下、各エージェント
-へのファンアウトは `skills` CLI の責務であり、再実装しない。
+自前で管理するのは config 1 つと `~/.agents/` 配下の **2 本の symlink**、そして各エージェントへの
+**ファンアウト**（`agent-skills distribute`）。
+
+ファンアウトは当初 `skills` CLI に任せていたが、それでは **CLI が入れたスキルしか配られない**。
+own と vendored は誰も張らないので、手で `ln -s` し忘れると store には在るのにエージェントからは
+見えない、という無言の欠落になる。配布先は `~/.config/agent-skills/config.json` の `agents` で
+明示的に opt-in する（既定は `claude-code` のみ）。取得は今も `skills` CLI に委譲する。
 
 ## 配布先は 5 サーフェスあり、同期しない。届くのは 2 つだけ
 
@@ -199,7 +204,10 @@ flowchart LR
 
 - GitHub からの取得、`skillFolderHash` によるバージョン固定
 - 70 以上のエージェントのインストール先レジストリ
-- symlink によるファンアウト
+- 自分が入れたスキルの symlink 配置
+
+ファンアウトだけは引き取った。CLI が張るのは CLI 自身が入れた `remote` のスキルに限られ、
+own / vendored は対象外だからで、取得ロジックそのものは今も委譲している。
 
 `~/.agents/skills` はこの CLI にとっての canonical store そのもの (`dist/cli.mjs`):
 

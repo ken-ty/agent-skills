@@ -19,7 +19,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  AGENT_SKILL_DIRS,
   HOOKS_DIR_NAME,
   HOOK_TEMPLATE,
   SKILL_KINDS,
@@ -41,6 +40,7 @@ import {
   tilde,
 } from "./lib/paths.ts";
 import { CONFIG_PATH, STORE_ENV, overrideStore, resolveStoreOrNull } from "./lib/store.ts";
+import { agentSettings } from "./lib/agents.ts";
 
 const repoMode = process.argv.includes("--repo");
 
@@ -324,40 +324,44 @@ function checkRemoteTracking(tracked: string[]): void {
 }
 
 /**
- * Per-agent fan-out is written by `npx skills`; we only report on it.
+ * Per-agent fan-out, for the agents this machine has enabled.
  *
- * `expected` is every skill that ought to be reachable from a non-universal
- * agent. Own and vendored skills get their link by hand (see README), so
- * forgetting one is easy — and the symptom is silence: the skill sits in the
- * store, doctor used to pass, and the agent simply never sees it.
+ * `expected` is every skill that ought to be reachable from an enabled agent.
+ * The links are written by `agent-skills distribute` (and by `sync`), so a gap
+ * here means one of those has not run since the store changed — the symptom is
+ * silence: the skill sits in the store and the agent simply never sees it.
+ *
+ * Disabled agents are summarised in one line rather than checked. Their dirs
+ * are none of this tool's business until someone enables them, and listing ten
+ * of them every run would bury the ones that matter.
  */
 function checkFanOut(expected: string[]): void {
-  console.log("agent fan-out (written by `npx skills`)");
+  console.log("agent fan-out (written by `agent-skills distribute`)");
   const skillsDir = storeSkills();
-  for (const { agent, dir, universal } of AGENT_SKILL_DIRS) {
-    // Universal agents read the canonical store directly, so an empty or
-    // absent per-agent dir is the expected, healthy state.
-    if (universal) {
-      ok(`${agent}: reads ~/.agents/skills directly (universal)`);
+  const settings = agentSettings();
+
+  for (const { def, enabled, source } of settings) {
+    if (source === "canonical") {
+      ok(`${def.agent}: reads ${tilde(def.dir)} directly — it is the store`);
       continue;
     }
+    if (!enabled) continue;
+
+    const { agent, dir } = def;
     if (!fs.existsSync(dir)) {
-      warn(`${agent}: ${tilde(dir)} not present`);
+      bad(`${agent}: enabled but ${tilde(dir)} does not exist — run \`agent-skills distribute\``);
       continue;
     }
     const entries = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => !e.name.startsWith("."));
     if (entries.length === 0) {
-      warn(`${agent}: ${tilde(dir)} is empty`);
+      bad(`${agent}: enabled but ${tilde(dir)} is empty — run \`agent-skills distribute\``);
       continue;
     }
 
     const linked = new Set(entries.map((e) => e.name));
     for (const name of expected) {
       if (linked.has(name)) continue;
-      bad(
-        `${agent}: ${name} is in the store but not in ${tilde(dir)} — ` +
-          `\`ln -s ../../.agents/skills/${name} ${tilde(path.join(dir, name))}\``,
-      );
+      bad(`${agent}: ${name} is in the store but not in ${tilde(dir)} — run \`agent-skills distribute\``);
     }
 
     for (const e of entries) {
@@ -378,6 +382,11 @@ function checkFanOut(expected: string[]): void {
         warn(`${agent}: ${e.name} is a real directory (not managed by this store)`);
       }
     }
+  }
+
+  const off = settings.filter((s) => !s.enabled && s.source !== "canonical");
+  if (off.length > 0) {
+    ok(`not distributed to: ${off.map((s) => s.def.agent).join(", ")} — \`agent-skills agents\` to change`);
   }
   console.log("");
 }
