@@ -28,6 +28,33 @@ sh install.sh          # bin を ~/.local/bin/{agent-skills,skill} へ symlink
 
 以後 `agent-skills`（短縮 `skill`）でどこからでも実行できる。
 
+### Windows
+
+**`install.sh` は使えない。** Git Bash から実行すると止まり、PowerShell 版を案内する。理由は 2 つあり、
+互いに独立している:
+
+1. `ln -s` に特権が要る（[#32](https://github.com/ken-ty/agent-skills/issues/32)）
+2. cmd.exe も PowerShell も `#!/usr/bin/env node` のシェバンを読まない ── 仮に link できても実行できない
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+symlink の代わりに `%USERPROFILE%\.local\bin\{agent-skills,skill}.cmd` を書き、リポジトリの場所は
+ユーザ環境変数 `AGENT_SKILLS_HOME` に入れる。**リポジトリを移動したら `install.ps1` を再実行すること**
+（sh 版は symlink なので張り直しで済むが、こちらは変数の書き換えが要る）。`.local\bin` が PATH に
+無ければ追加コマンドを表示する。どちらも新しいターミナルから効く。
+
+パスをシムに埋めないのは、**cmd.exe が `.cmd` をその時のコンソールのコードページで読む**ため。
+932 で書いたパスは 65001 のターミナルから文字化けし、その逆も起きる。非ASCII が 1 文字でも
+（日本語のユーザ名で十分）シムは黙って壊れたパスを指す。環境変数は Unicode で保持され cmd 自身が
+展開するので、シムを純 ASCII に保てばこの問題が消える。8.3 短縮名では解決しない ── `戸倉健` のような
+短いディレクトリ名には別名が生成されず、非ASCII が残る。
+
+**`link` / `sync` / `distribute` は依然として開発者モードか管理者権限を要求する。** インストールは
+通るが配線で `EPERM` になる。これは [#32](https://github.com/ken-ty/agent-skills/issues/32) の担当で、
+このスクリプトの範囲外。
+
 ## store をつなぐ
 
 ```bash
@@ -329,3 +356,10 @@ audit: 21 file(s) clean (built-in + gitleaks)
 - **`pre-commit differs from the tool's template`** — ツール側の hook が更新され、store の
   コピーが古いまま。`agent-skills link` で入れ直す
 - **`This repo needs Node >= 22.18`** — `nvm install 22` などで上げる
+- **(Windows) `npx skills add ... exited null`** — 起動できていない。`sync` は shell 経由で `npx` を
+  呼ぶので、これが出るなら古い版。更新する
+- **(Windows) `AGENT_SKILLS_HOME is not set`** — `install.ps1` を実行していないか、実行後に
+  ターミナルを開き直していない
+- **(Windows) リポジトリを移動した** — `install.ps1` を再実行して `AGENT_SKILLS_HOME` を張り替える
+- **(Windows) `EPERM: operation not permitted, symlink`** — 開発者モードを ON にするか、管理者権限の
+  シェルで実行する（[#32](https://github.com/ken-ty/agent-skills/issues/32)）

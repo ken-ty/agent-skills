@@ -13,6 +13,21 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC="$SCRIPT_DIR/bin/agent-skills"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 
+# Git Bash / MSYS2 / Cygwin run this script happily and then produce something
+# that cannot work: `ln -s` there either copies or needs a privilege the user
+# does not have (#32), and neither cmd.exe nor PowerShell reads the shebang, so
+# the result is never executable as `agent-skills`. Send them to the PowerShell
+# installer rather than leaving a broken link behind.
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*)
+    echo "install: this is a Windows shell — symlinks and the shebang do not work here." >&2
+    echo "  Use the PowerShell installer instead:" >&2
+    echo >&2
+    echo "    powershell -ExecutionPolicy Bypass -File install.ps1" >&2
+    exit 1
+    ;;
+esac
+
 if [ ! -f "$SRC" ]; then
   echo "install: $SRC not found — run from the repo root" >&2
   exit 1
