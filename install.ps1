@@ -15,11 +15,11 @@
 # environment variable rather than into the shims, because cmd.exe reads a .cmd
 # in whatever codepage the console happens to be in: a path written as OEM 932
 # is misread by a terminal sitting at 65001, and vice versa. One non-ASCII
-# character in the path — a Japanese username is enough — and the shim silently
+# character in the path - a non-ASCII username is enough - and the shim silently
 # points at nothing. Environment variables are stored as Unicode and expanded by
 # cmd itself, so the shims stay pure ASCII and the encoding question disappears.
-# (8.3 short paths do not save us: a short directory name like 戸倉健 gets no
-# alias, so non-ASCII survives.)
+# (8.3 short paths do not save us: a directory name short enough to need no
+# alias keeps its non-ASCII, and profile directories usually are.)
 #
 # Moving the repo means re-running this script, which is what rewrites the
 # variable.
@@ -100,7 +100,7 @@ function Install-Shim([string]$name) {
     Write-Host "  write $dest"
 }
 
-# Git Bash resolves `agent-skills.cmd` but not `agent-skills` — MSYS appends
+# Git Bash resolves `agent-skills.cmd` but not `agent-skills` - MSYS appends
 # .exe when searching PATH, never .cmd. Anything invoked through sh therefore
 # cannot see the command, and the store's pre-commit hook is exactly that:
 # it dies with "agent-skills not on PATH" and blocks every commit to the store.
