@@ -76,5 +76,6 @@
 | 2026-07-29 | `doctor` が実行ツリーの `.claude/skills` と store の同名衝突を BAD として検出するようになった（[#11](https://github.com/ken-ty/agent-skills/issues/11) の選択肢 4） |
 | 2026-07-29 | ★4 `doctor` が remote 実体の git 追跡を BAD として検出するようになった。`--repo` でも走る（[#8](https://github.com/ken-ty/agent-skills/issues/8)） |
 | 2026-07-30 | `agent-skills share <name> [--keep]` を実装。ステートレスで、publish 直前に kind と秘密を検査する（[#24](https://github.com/ken-ty/agent-skills/issues/24)） |
+| 2026-08-07 | ファンアウトを引き取り、`agent-skills agents` / `distribute` を新設。配布先は config の `agents` で opt-in（既定は `claude-code` のみ）。`sync` の末尾と `doctor` も新しい基準で動く |
 | 2026-07-30 | 配布面 `ken-ty/agent-skills-share` を作り、store に `share-agent-skill`（手順書）を追加（[#24](https://github.com/ken-ty/agent-skills/issues/24)、store [#11](https://github.com/ken-ty/agent-skills-store/pull/11)） |
 | 2026-07-31 | 期限切れ一時共有の掃除を **share 側の scheduled workflow** で実装し、着手可能だった `share --gc` を落とした。ツールに持たせると呼ばれないと走らないが、CI なら共有した本人が忘れても走る。store 側に置く案は PAT が要るうえ一方向依存が壊れるので却下（share [#1](https://github.com/ken-ty/agent-skills-share/pull/1)、[#24](https://github.com/ken-ty/agent-skills/issues/24)） |

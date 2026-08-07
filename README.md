@@ -52,13 +52,43 @@ audit フックを設置する。
 | `agent-skills init <dir>` | 空の store を scaffold し、`link` して配線する |
 | `agent-skills link <dir>` | 既存 store を config に登録し、`~/.agents` を向け、hook を設置 (冪等、`--dry-run` 可) |
 | `agent-skills list` | store のスキルを kind ごとに一覧 (read-only) |
-| `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成 |
+| `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成し、有効なエージェントへ symlink を配る |
+| `agent-skills agents` | どのエージェントへ配るかの一覧と現在の状態 (read-only)。`enable <name>` / `disable <name>` で切り替え |
+| `agent-skills distribute` | 有効なエージェントのディレクトリを store に合わせる (`--dry-run` 可) |
 | `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 | `agent-skills share <name>` | スキルを 1 本だけ**外部の人に渡す**。既定は期限つきの一時共有、`--keep` で恒久共有 (`--dry-run` 可) |
 
 `npm run <cmd>` でも同じものが動く（リポジトリ内でのみ）。`agent-skills`/`skill` はどこからでも。
+
+## どのエージェントへ配るか
+
+store が唯一の正で、各エージェントはそこへの **per-skill symlink** 越しに見る。誰に配るかは
+`~/.config/agent-skills/config.json` の `agents` が決める。
+
+```bash
+agent-skills agents                    # 一覧（どこへ張るか・いま何が入っているか）
+agent-skills agents enable codex       # 配布先に加える
+agent-skills agents disable openclaw   # 外す（既存の symlink はそのまま残る）
+agent-skills distribute                # 実際に張る・直す・掃除する
+```
+
+```json
+{ "agents": { "codex": true, "cursor": true, "openclaw": false } }
+```
+
+キーを書かなければ**既定値**に従う。既定は `claude-code` だけ true で、残りは全て false。
+
+**インストール済みであることは同意ではない、という理由でこの既定にしてある。** wrangler 4.119 は
+逆をやる: エージェントを 11 個「検出」して、断りなく全部のディレクトリへ Cloudflare のスキルを
+copy モードで置いていく（2026-08-07 に実際に踏んだ）。ディレクトリの存在は配ってよい根拠にならない。
+
+配布で触るのは **symlink だけ**。実体のディレクトリが同名で居座っていたら、退けずに報告して飛ばす
+（そのエージェント同梱のスキルかもしれず、消してよいのはそれを見た人間だけ）。store から消えた
+スキルの残骸は、`~/.agents/skills` を指す symlink に限って掃除する。
+
+`warp` は `~/.agents/skills`（= store そのもの）を読むので配布対象にできない。`enable` してもエラーになる。
 
 ## サーフェスは 5 つあり、互いに同期しない
 
@@ -133,7 +163,7 @@ store 側の作業。3 種とも「実体を用意し、`catalog.json` に登録
 同じ形。kind ごとの詳細は **store の README** を参照。要点:
 
 - **own** … `skills/<name>/SKILL.md` を書く → `catalog.json` に `kind: own` → doctor → commit。
-  Claude Code へは per-skill symlink が要る: `ln -s ../../.agents/skills/<name> ~/.claude/skills/<name>`。
+  各エージェントへの symlink は `agent-skills distribute`（`sync` の末尾でも走る）が張る。手で `ln -s` する必要は無い。
 - **remote** … `npx skills add <owner>/<repo> -g`（**必ず 2 エージェント以上を選ぶ**。1 つだと copy モードに
   なり store を経由しない）→ `catalog.json` に `kind: remote` → `agent-skills sync` → commit。
   **`sync` の前に `git add -A` しないこと** — gitignore を書くのは `sync` なので、その前に足すと

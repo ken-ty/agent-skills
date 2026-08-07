@@ -12,6 +12,8 @@
     "link": "node scripts/run.js link",
     "list": "node scripts/run.js list",
     "sync": "node scripts/run.js sync",
+    "agents": "node scripts/run.js agents",
+    "distribute": "node scripts/run.js distribute",
     "doctor": "node scripts/run.js doctor",
     "audit": "node scripts/run.js audit",
     "push": "node scripts/run.js push",

@@ -28,8 +28,17 @@ export const CONFIG_PATH: string = path.join(CONFIG_DIR, "config.json");
  * Optional: sharing is opt-in, and a store works fine without ever handing a
  * skill to anyone. Kept here rather than in the store so the store stays unaware
  * of where its skills get distributed.
+ *
+ * `agents` maps an agent id to whether this machine feeds it per-skill symlinks
+ * — see lib/agents.ts for the registry of ids and what each default is. Absent
+ * keys fall back to that default rather than to false, so a new agent added to
+ * the registry does not silently start or stop being fed.
  */
-export type Config = { store: string; shareRepo?: string };
+export type Config = {
+  store: string;
+  shareRepo?: string;
+  agents?: Record<string, boolean>;
+};
 
 /** Read the config file. Returns null when absent or unparseable. */
 export function readConfig(): Config | null {

@@ -3,9 +3,12 @@
  *   1. re-fetch any remote skill the lockfile tracks but that is missing on disk
  *   2. regenerate skills/.gitignore so lockfile entries stay out of git
  *   3. report catalogued skills git should have restored (own / vendored)
+ *   4. relink every enabled agent dir so it mirrors the store
  *
  * Fetching is delegated to `npx skills` — this repo deliberately does not
- * reimplement acquisition or the per-agent fan-out.
+ * reimplement acquisition. The fan-out in step 4 *is* ours: `npx skills` only
+ * links the skills it installs, so own and vendored skills never reached an
+ * agent unless someone made the symlink by hand, and forgetting one is silent.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -25,6 +28,7 @@ import {
   thirdPartyNames,
   tilde,
 } from "./lib/paths.ts";
+import { distributableNames, printFanOut, reconcileFanOut } from "./lib/fanout.ts";
 
 const gitignorePath = (): string => path.join(storeSkills(), ".gitignore");
 const BEGIN = "# --- managed by scripts/sync.ts (do not edit) ---";
@@ -213,6 +217,9 @@ function main(): void {
     console.log(`\nnot in catalog.json: ${uncatalogued.join(", ")}`);
     console.log("  add an entry so author / refs are recorded — `agent-skills doctor` lists them");
   }
+
+  console.log("");
+  if (!printFanOut(reconcileFanOut(distributableNames(), dryRun), dryRun)) process.exitCode = 1;
 }
 
 main();

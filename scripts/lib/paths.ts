@@ -119,8 +119,8 @@ export const AGENTS_LOCK: string = path.join(AGENTS_DIR, ".skill-lock.json");
 
 /**
  * The two links the tool owns, pointing `~/.agents` at the configured store.
- * Everything below `~/.agents` (the per-agent fan-out into ~/.claude/skills,
- * ~/.codex/skills, ...) is owned by `npx skills`.
+ * The per-agent fan-out below it (~/.claude/skills, ~/.codex/skills, ...) is
+ * owned by lib/agents.ts + lib/fanout.ts — see `agent-skills agents`.
  */
 export function links(): ReadonlyArray<{ label: string; from: string; to: string }> {
   return [
@@ -128,25 +128,6 @@ export function links(): ReadonlyArray<{ label: string; from: string; to: string
     { label: "lock", from: AGENTS_LOCK, to: storeLock() },
   ];
 }
-
-/**
- * Per-agent global skill dirs, mirroring the `skills` CLI agent registry.
- * Inspected read-only by doctor — this tool never writes here.
- *
- * `universal` agents declare `skillsDir: ".agents/skills"`, so the CLI installs
- * them straight into the canonical store and their own dir stays empty. Only
- * non-universal agents get per-skill symlinks.
- */
-export const AGENT_SKILL_DIRS: ReadonlyArray<{
-  agent: string;
-  dir: string;
-  universal: boolean;
-}> = [
-  { agent: "claude-code", dir: path.join(HOME, ".claude", "skills"), universal: false },
-  { agent: "codex", dir: path.join(HOME, ".codex", "skills"), universal: true },
-  { agent: "gemini-cli", dir: path.join(HOME, ".gemini", "skills"), universal: true },
-  { agent: "cursor", dir: path.join(HOME, ".cursor", "skills"), universal: true },
-];
 
 export type LinkState =
   | { kind: "missing" }
