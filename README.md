@@ -57,9 +57,26 @@ store へのコミットが全部止まる。**リポジトリを移動したら
 展開するので、シムを純 ASCII に保てばこの問題が消える。8.3 短縮名では解決しない ── `戸倉健` のような
 短いディレクトリ名には別名が生成されず、非ASCII が残る。
 
-**`link` / `sync` / `distribute` は依然として開発者モードか管理者権限を要求する。** インストールは
-通るが配線で `EPERM` になる。これは [#32](https://github.com/ken-ty/agent-skills/issues/32) の担当で、
-このスクリプトの範囲外。
+#### symlink には特権が要る
+
+インストールは非管理者で通るが、**配線（`link` / `sync` / `distribute`）は symlink を作るので
+特権が要る。** Windows は `SeCreateSymbolicLinkPrivilege` を要求し、一般アカウントは既定で持たない。
+**この特権はプロセス生成時に決まるので、走り出したコマンドは自分を昇格できない。** どう起動するかの
+話であって、ツールが後から何とかできる話ではない。
+
+どちらか一方でよい。**どちらも設定 → システム → 開発者向け（`ms-settings:developers`）の
+トグル 1 つ**で、同じページにある:
+
+| | 設定 | 以後 |
+| --- | --- | --- |
+| **開発者モード** | 「開発者モード」を ON | 何も要らない。素で `agent-skills sync` が通る |
+| **sudo** | 「sudo を有効にする」を ON + **「インラインで実行」** | `sudo agent-skills sync` のように都度昇格（UAC が出る） |
+
+`sudo` は Windows 11 に同梱されているが既定で無効。**モードは必ず「インライン」にする** —
+既定の `forceNewWindow` は別ウィンドウで実行するので、出力が飛んで CLI として使えない。
+
+`EPERM` を踏んだときはこの案内をそのまま出す。素の Node のエラーは syscall 名しか言わないので、
+設定で直るものだと分からない。
 
 ## store をつなぐ
 
@@ -369,5 +386,5 @@ audit: 21 file(s) clean (built-in + gitleaks)
 - **(Windows) `AGENT_SKILLS_HOME is not set`** — `install.ps1` を実行していないか、実行後に
   ターミナルを開き直していない
 - **(Windows) リポジトリを移動した** — `install.ps1` を再実行して `AGENT_SKILLS_HOME` を張り替える
-- **(Windows) `EPERM: operation not permitted, symlink`** — 開発者モードを ON にするか、管理者権限の
-  シェルで実行する（[#32](https://github.com/ken-ty/agent-skills/issues/32)）
+- **(Windows) `EPERM: operation not permitted, symlink`** — 開発者モードを ON にするか、
+  `sudo agent-skills ...` で実行する。コマンド自身が対処法を出す
