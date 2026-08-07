@@ -40,8 +40,14 @@ sh install.sh          # bin を ~/.local/bin/{agent-skills,skill} へ symlink
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-symlink の代わりに `%USERPROFILE%\.local\bin\{agent-skills,skill}.cmd` を書き、リポジトリの場所は
-ユーザ環境変数 `AGENT_SKILLS_HOME` に入れる。**リポジトリを移動したら `install.ps1` を再実行すること**
+symlink の代わりに `%USERPROFILE%\.local\bin\` へ 4 つ置く ── `{agent-skills,skill}.cmd` と、
+**拡張子なしの `{agent-skills,skill}`（sh ラッパー）**。リポジトリの場所はユーザ環境変数
+`AGENT_SKILLS_HOME` に入れる。
+
+sh ラッパーが要るのは、**Git Bash が `agent-skills.cmd` は解決するが `agent-skills` は解決しない**
+ため（MSYS は PATH 探索で `.exe` は補うが `.cmd` は補わない）。sh から呼ばれるものすべてが
+コマンドを見つけられず、**store の pre-commit hook がまさにそれ** ── `agent-skills not on PATH` で
+store へのコミットが全部止まる。**リポジトリを移動したら `install.ps1` を再実行すること**
 （sh 版は symlink なので張り直しで済むが、こちらは変数の書き換えが要る）。`.local\bin` が PATH に
 無ければ追加コマンドを表示する。どちらも新しいターミナルから効く。
 
@@ -358,6 +364,8 @@ audit: 21 file(s) clean (built-in + gitleaks)
 - **`This repo needs Node >= 22.18`** — `nvm install 22` などで上げる
 - **(Windows) `npx skills add ... exited null`** — 起動できていない。`sync` は shell 経由で `npx` を
   呼ぶので、これが出るなら古い版。更新する
+- **(Windows) store の commit が `pre-commit: agent-skills not on PATH` で止まる** — `.cmd` しか
+  置かれていない。`install.ps1` を再実行して sh ラッパーも入れる
 - **(Windows) `AGENT_SKILLS_HOME is not set`** — `install.ps1` を実行していないか、実行後に
   ターミナルを開き直していない
 - **(Windows) リポジトリを移動した** — `install.ps1` を再実行して `AGENT_SKILLS_HOME` を張り替える
