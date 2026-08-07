@@ -79,6 +79,14 @@ function buildArgs(source: string, skill: string, agents: string[]): string[] {
 
 const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, "");
 
+// Windows ships npx as npx.cmd, and neither name spawns without a shell:
+// "npx" is ENOENT, "npx.cmd" is EINVAL since Node refused to exec .cmd/.bat
+// directly (CVE-2024-27980). Both surface as status null, which reads as "the
+// fetch failed" rather than "we never started it". A shell is the only way in;
+// every argument here is a repo slug or an agent/skill name, so concatenation
+// is safe.
+const WIN = process.platform === "win32";
+
 /**
  * Run `skills add`, self-healing against a stale agent list.
  *
@@ -89,7 +97,7 @@ const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, "");
  */
 function install(source: string, skill: string, agents: string[]): boolean {
   const run = (list: string[]) =>
-    spawnSync("npx", buildArgs(source, skill, list), { encoding: "utf8" });
+    spawnSync("npx", buildArgs(source, skill, list), { encoding: "utf8", shell: WIN });
 
   let res = run(agents);
   let out = stripAnsi(`${res.stdout ?? ""}${res.stderr ?? ""}`);

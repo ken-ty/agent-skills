@@ -28,6 +28,61 @@ sh install.sh          # bin を ~/.local/bin/{agent-skills,skill} へ symlink
 
 以後 `agent-skills`（短縮 `skill`）でどこからでも実行できる。
 
+### Windows
+
+**`install.sh` は使えない。** Git Bash から実行すると止まり、PowerShell 版を案内する。理由は 2 つあり、
+互いに独立している:
+
+1. `ln -s` に特権が要る（[#32](https://github.com/ken-ty/agent-skills/issues/32)）
+2. cmd.exe も PowerShell も `#!/usr/bin/env node` のシェバンを読まない ── 仮に link できても実行できない
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+symlink の代わりに `%USERPROFILE%\.local\bin\` へ 4 つ置く ── `{agent-skills,skill}.cmd` と、
+**拡張子なしの `{agent-skills,skill}`（sh ラッパー）**。リポジトリの場所はユーザ環境変数
+`AGENT_SKILLS_HOME` に入れる。
+
+sh ラッパーが要るのは、**Git Bash が `agent-skills.cmd` は解決するが `agent-skills` は解決しない**
+ため（MSYS は PATH 探索で `.exe` は補うが `.cmd` は補わない）。sh から呼ばれるものすべてが
+コマンドを見つけられず、**store の pre-commit hook がまさにそれ** ── `agent-skills not on PATH` で
+store へのコミットが全部止まる。**リポジトリを移動したら `install.ps1` を再実行すること**
+（sh 版は symlink なので張り直しで済むが、こちらは変数の書き換えが要る）。`.local\bin` が PATH に
+無ければ追加コマンドを表示する。どちらも新しいターミナルから効く。
+
+パスをシムに埋めないのは、**cmd.exe が `.cmd` をその時のコンソールのコードページで読む**ため。
+932 で書いたパスは 65001 のターミナルから文字化けし、その逆も起きる。非ASCII が 1 文字でも
+（日本語のユーザ名で十分）シムは黙って壊れたパスを指す。環境変数は Unicode で保持され cmd 自身が
+展開するので、シムを純 ASCII に保てばこの問題が消える。8.3 短縮名では解決しない ── `戸倉健` のような
+短いディレクトリ名には別名が生成されず、非ASCII が残る。
+
+#### symlink には特権が要る
+
+インストールは非管理者で通るが、**配線（`link` / `sync` / `distribute`）は symlink を作るので
+特権が要る。** Windows は `SeCreateSymbolicLinkPrivilege` を要求し、一般アカウントは既定で持たない。
+**この特権はプロセス生成時に決まるので、走り出したコマンドは自分を昇格できない。** どう起動するかの
+話であって、ツールが後から何とかできる話ではない。
+
+どちらか一方でよい。**どちらも設定 → システム → 開発者向け（`ms-settings:developers`）の
+トグル 1 つ**で、同じページにある:
+
+| | 設定 | 以後 |
+| --- | --- | --- |
+| **開発者モード** | 「開発者モード」を ON | 何も要らない。素で `agent-skills sync` が通る |
+| **sudo** | 「sudo を有効にする」を ON + **「インラインで実行」** | `sudo agent-skills sync` のように都度昇格（UAC が出る） |
+
+`sudo` は Windows 11 に同梱されているが既定で無効。**モードは必ず「インライン」にする** —
+既定の `forceNewWindow` は別ウィンドウで実行するので、出力が飛んで CLI として使えない。
+
+**`sudo` はコマンドを「打ったシェルの PATH」で解決する。** `install.ps1` の直後、まだ
+`~\.local\bin` が載っていないターミナルで `sudo agent-skills ...` と打つと
+`コマンドが見つかりません` になる ── 昇格の失敗に見えるが、単にターミナルを開き直せば直る。
+昇格側の環境は同じユーザのものなので、`AGENT_SKILLS_HOME` も User PATH もそのまま効く。
+
+`EPERM` を踏んだときはこの案内をそのまま出す。素の Node のエラーは syscall 名しか言わないので、
+設定で直るものだと分からない。
+
 ## store をつなぐ
 
 ```bash
@@ -329,3 +384,12 @@ audit: 21 file(s) clean (built-in + gitleaks)
 - **`pre-commit differs from the tool's template`** — ツール側の hook が更新され、store の
   コピーが古いまま。`agent-skills link` で入れ直す
 - **`This repo needs Node >= 22.18`** — `nvm install 22` などで上げる
+- **(Windows) `npx skills add ... exited null`** — 起動できていない。`sync` は shell 経由で `npx` を
+  呼ぶので、これが出るなら古い版。更新する
+- **(Windows) store の commit が `pre-commit: agent-skills not on PATH` で止まる** — `.cmd` しか
+  置かれていない。`install.ps1` を再実行して sh ラッパーも入れる
+- **(Windows) `AGENT_SKILLS_HOME is not set`** — `install.ps1` を実行していないか、実行後に
+  ターミナルを開き直していない
+- **(Windows) リポジトリを移動した** — `install.ps1` を再実行して `AGENT_SKILLS_HOME` を張り替える
+- **(Windows) `EPERM: operation not permitted, symlink`** — 開発者モードを ON にするか、
+  `sudo agent-skills ...` で実行する。コマンド自身が対処法を出す

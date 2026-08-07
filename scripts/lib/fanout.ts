@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { AGENTS_SKILLS, inspectLink, storeSkills, tilde } from "./paths.ts";
 import { type AgentDef, distributionTargets, linkTarget } from "./agents.ts";
+import { symlinkSync } from "./symlink.ts";
 
 export type FanOutAction =
   | { kind: "linked"; agent: string; name: string; at: string }
@@ -89,12 +90,12 @@ export function reconcileFanOut(names: string[], dryRun: boolean): FanOutReport 
       if (state.kind === "linked-elsewhere") {
         if (!dryRun) {
           fs.unlinkSync(at);
-          fs.symlinkSync(linkTarget(dir, name), at);
+          symlinkSync(linkTarget(dir, name), at);
         }
         actions.push({ kind: "repointed", agent, name, at, was: state.target });
         continue;
       }
-      if (!dryRun) fs.symlinkSync(linkTarget(dir, name), at);
+      if (!dryRun) symlinkSync(linkTarget(dir, name), at);
       actions.push({ kind: "linked", agent, name, at });
     }
 

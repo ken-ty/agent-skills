@@ -62,4 +62,17 @@ if (!SCRIPTS.includes(name)) {
 // process.argv directly, and `link foo` must give it `foo`, not `link foo`.
 process.argv.splice(2, 1);
 
-await import(new URL(`./${name}.ts`, import.meta.url));
+// A failure the user can fix by rerunning differently (see lib/symlink.ts) is
+// advice, not a defect. Printing Node's stack under it buries the one useful
+// line and reads as "the tool crashed" — so those exit with the message alone.
+// Anything unrecognised keeps its stack, because that one really is a bug.
+try {
+  await import(new URL(`./${name}.ts`, import.meta.url));
+} catch (err) {
+  if (err?.actionable === true) {
+    console.error("");
+    console.error(err.message);
+    process.exit(1);
+  }
+  throw err;
+}

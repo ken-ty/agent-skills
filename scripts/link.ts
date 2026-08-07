@@ -24,6 +24,7 @@ import {
   tilde,
 } from "./lib/paths.ts";
 import { writeConfig } from "./lib/store.ts";
+import { symlinkSync } from "./lib/symlink.ts";
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run") || argv.includes("-n");
@@ -53,7 +54,7 @@ function ensureDir(dir: string): void {
 }
 
 function symlink(from: string, to: string): void {
-  act(`ln -s ${tilde(to)} ${tilde(from)}`, () => fs.symlinkSync(to, from));
+  act(`ln -s ${tilde(to)} ${tilde(from)}`, () => symlinkSync(to, from));
 }
 
 /**
