@@ -22,7 +22,9 @@ const HOWTO = [
   "  - Developer Mode on (Settings > System > For developers) — then nothing else changes",
   "  - run the command elevated: `sudo agent-skills ...`, or an elevated shell",
   "    (`sudo` ships with Windows 11 but is off by default; enable it on the same",
-  "     settings page, and set it to run inline so output stays in this console)",
+  "     settings page, and set it to run inline so output stays in this console.",
+  "     It resolves the command against the PATH of the shell you type it in, so",
+  "     open a fresh terminal after install or it reports 'command not found')",
 ].join("\n");
 
 export function symlinkSync(target: string, at: string): void {
