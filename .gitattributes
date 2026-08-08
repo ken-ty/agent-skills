@@ -1,0 +1,22 @@
+# 既定は git に判定させる。バイナリを壊さないため。
+* text=auto
+
+# 改行が意味を持つもの、あるいは他リポジトリと1バイト単位で比較されるものは
+# LF に固定する。Windows は core.autocrlf=true が既定なので、宣言が無いと
+# CRLF でチェックアウトされる。
+#
+# hooks/pre-commit は store 側にコピーされ、`agent-skills doctor` が
+# テンプレートと内容比較する。改行だけが違っても BAD になり、
+# `agent-skills link` で直そうとすると今度は store を CRLF で汚す。
+hooks/*      text eol=lf
+*.sh         text eol=lf
+bin/*        text eol=lf
+
+# ツールが LF で書き出すもの。CRLF だと「git diff は空なのに変更扱い」になる。
+*.ts         text eol=lf
+*.js         text eol=lf
+*.json       text eol=lf
+*.md         text eol=lf
+
+# Windows でしか動かないものは CRLF のまま。
+*.ps1        text eol=crlf
