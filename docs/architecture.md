@@ -123,14 +123,14 @@ flowchart BT
   agentsSkills["~/.agents/skills"]
   agentsLock["~/.agents/.skill-lock.json"]
   claude["~/.claude/skills/&lt;name&gt;<br/><i>per-skill symlink</i>"]
-  universal["Codex / Gemini CLI / Cursor …<br/><i>universal agent</i>"]
+  others["~/.codex/skills/&lt;name&gt; ほか<br/><i>per-skill symlink (opt-in)</i>"]
 
   cli -.->|"読む/書く"| config
   config -.->|"指す"| store
   agentsSkills ==>|"symlink (ツールが張る)"| skills
   agentsLock ==>|"symlink (ツールが張る)"| lock
-  claude -->|"symlink (npx skills が生成)"| agentsSkills
-  universal -.->|"直接読む"| agentsSkills
+  claude -->|"symlink (distribute が張る)"| agentsSkills
+  others -->|"symlink (distribute が張る)"| agentsSkills
 ```
 
 太線の 2 本がツールの持ち物 (`~/.agents/` を store へ向ける)。`catalog.json` に `~/.agents/`
@@ -220,9 +220,9 @@ function getCanonicalSkillsDir(global, cwd) {
 つまり `~/.agents/skills` を store へ向けるだけで、CLI が書き込むすべてが自動的に store の
 版管理下に入る。取得も配布も書く必要がない。
 
-### universal agent
+### `universal` は「グローバルでも store を直接読む」という意味ではない
 
-CLI はエージェントを 2 種類に分ける:
+CLI にはこの分類がある:
 
 ```js
 function isUniversalAgent(type) {
@@ -230,12 +230,29 @@ function isUniversalAgent(type) {
 }
 ```
 
-- **universal** (Codex / Gemini CLI / Cursor / Cline / Amp …) — canonical store を直接読む。
-  専用ディレクトリは空のままでよい
-- **非 universal** (Claude Code — `skillsDir: ".claude/skills"`) — `~/.claude/skills/<name>`
-  に per-skill symlink が張られる
+**ここを長らく読み違えていた。** かつてこのドキュメントと `doctor` は「universal (Codex /
+Gemini CLI / Cursor …) は canonical store を直接読むので、専用ディレクトリは空で正常」と
+書いていた。誤りである。
 
-`agent-skills doctor` はこの区別を踏まえて判定する。Codex の `~/.codex/skills` が空でも正常。
+`skillsDir` は**プロジェクト相対**のパスで、グローバルインストールの行き先は別フィールドの
+`globalSkillsDir` が持つ (`dist/cli.mjs`):
+
+```js
+codex:        { skillsDir: ".agents/skills", globalSkillsDir: join(codexHome, "skills") }
+cursor:       { skillsDir: ".agents/skills", globalSkillsDir: join(home, ".cursor/skills") }
+"gemini-cli": { skillsDir: ".agents/skills", globalSkillsDir: join(home, ".gemini/skills") }
+```
+
+つまり `-g` で入れたスキルは `~/.codex/skills/<name>` などに symlink される。**空で正常な
+ディレクトリではなく、空なら本当に見えていない。** 実際 2026-08-07 時点で、この store の
+スキルは `~/.claude/skills` 以外のどのエージェントにも 1 本も届いていなかった。
+
+`skillsDir` が意味を持つ場面は 1 つだけ残る — 下記の copy モード判定で、CLI が
+`uniqueDirs` を数えるときに見るのがこのフィールドである。
+
+例外として `cline` だけは `globalSkillsDir` も `~/.agents/skills` を指す（wrangler 側の
+レジストリは `~/.cline/skills` と言っており、両者は食い違っている）。どちらに張っても
+実害は無いので、このツールは `~/.cline/skills` に張る側を採っている。
 
 ## 落とし穴: 単一エージェント指定は copy モードになる
 
