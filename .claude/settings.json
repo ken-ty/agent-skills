@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr:*)",
+      "Bash(git push:*)",
+      "Bash(git branch -D:*)",
+      "Bash(npx tsc:*)",
+      "Bash(agent-skills:*)"
+    ]
+  }
+}
