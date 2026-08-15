@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import {
   AGENTS_DIR,
   AGENTS_LOCK,
+  AGENTS_MD,
   AGENTS_SKILLS,
   HOOKS_DIR_NAME,
   HOOK_TEMPLATE,
@@ -51,6 +52,28 @@ function fail(msg: string): void {
 function ensureDir(dir: string): void {
   if (fs.existsSync(dir)) return;
   act(`mkdir -p ${tilde(dir)}`, () => fs.mkdirSync(dir, { recursive: true }));
+}
+
+/**
+ * A store without an AGENTS.md yet still gets a link, so seed a stub rather
+ * than leave `~/.agents/AGENTS.md` dangling. `ensureDir` is the same idea for
+ * `skills/`; a file just needs a body to exist at all. Never overwrites.
+ *
+ * The stub says only what the file is for. Its content is the store owner's —
+ * this tool is shared, so it must not seed anyone's language or house rules.
+ */
+function seedAgentsMd(file: string): void {
+  if (fs.existsSync(file)) return;
+  ensureDir(path.dirname(file));
+  act(`write ${tilde(file)} (stub)`, () =>
+    fs.writeFileSync(
+      file,
+      "# AGENTS.md\n\n" +
+        "Loaded by every agent, at the start of every session.\n" +
+        "Write only what holds true in every repository.\n",
+      "utf8",
+    ),
+  );
 }
 
 function symlink(from: string, to: string): void {
@@ -165,12 +188,14 @@ function main(): void {
 
   ensureDir(path.join(storeDir, "skills"));
   ensureDir(AGENTS_DIR);
+  seedAgentsMd(path.join(storeDir, "agents", "AGENTS.md"));
 
   // Targets come straight from storeDir, not from config: link is what writes
   // the config, so it cannot read the store path back out of it yet.
   const linkTargets = [
     { label: "skills", from: AGENTS_SKILLS, to: path.join(storeDir, "skills") },
     { label: "lock", from: AGENTS_LOCK, to: path.join(storeDir, "skills.lock") },
+    { label: "agents.md", from: AGENTS_MD, to: path.join(storeDir, "agents", "AGENTS.md") },
   ];
   for (const { label, from, to } of linkTargets) {
     console.log(`${label}: ${tilde(from)} -> ${tilde(to)}`);

@@ -34,6 +34,17 @@ export type AgentDef = {
   canonical: boolean;
   /** Fed unless config says otherwise. Only claude-code — see the file header. */
   defaultDistribute: boolean;
+  /**
+   * Absolute path to the agent's *global instruction file* — the prose every
+   * session of that agent reads unconditionally, as opposed to `dir`, which
+   * holds skills that load on demand.
+   *
+   * Absent means "this tool does not know where this agent keeps one", and the
+   * agent is skipped. Guessing is worse than skipping: a wrong path writes a
+   * file the agent never reads, and the user is left believing it is wired.
+   * Only entries confirmed against the agent's own docs carry this.
+   */
+  instructions?: string;
 };
 
 /**
@@ -52,6 +63,7 @@ export const AGENT_REGISTRY: ReadonlyArray<AgentDef> = [
     dir: path.join(HOME, ".claude", "skills"),
     canonical: false,
     defaultDistribute: true,
+    instructions: path.join(HOME, ".claude", "CLAUDE.md"),
   },
   {
     agent: "codex",
@@ -59,6 +71,7 @@ export const AGENT_REGISTRY: ReadonlyArray<AgentDef> = [
     dir: path.join(HOME, ".codex", "skills"),
     canonical: false,
     defaultDistribute: false,
+    instructions: path.join(HOME, ".codex", "AGENTS.md"),
   },
   {
     agent: "gemini-cli",
@@ -66,6 +79,7 @@ export const AGENT_REGISTRY: ReadonlyArray<AgentDef> = [
     dir: path.join(HOME, ".gemini", "skills"),
     canonical: false,
     defaultDistribute: false,
+    instructions: path.join(HOME, ".gemini", "GEMINI.md"),
   },
   {
     agent: "cursor",

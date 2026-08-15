@@ -13,7 +13,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { AGENTS_SKILLS, inspectLink, storeSkills, tilde } from "./paths.ts";
+import { AGENTS_MD, AGENTS_SKILLS, inspectLink, storeSkills, tilde } from "./paths.ts";
 import { type AgentDef, distributionTargets, linkTarget } from "./agents.ts";
 import { symlinkSync } from "./symlink.ts";
 
@@ -164,4 +164,77 @@ export function printFanOut(report: FanOutReport, dryRun: boolean): boolean {
     console.log(`fan-out: up to date (${alreadyCorrect} link(s))`);
   }
   return blocked.length === 0;
+}
+
+export type InstructionAction =
+  | { kind: "linked"; agent: string; at: string }
+  | { kind: "ok"; agent: string; at: string }
+  | { kind: "repointed"; agent: string; at: string; was: string }
+  | { kind: "manual"; agent: string; at: string };
+
+/**
+ * Point each enabled agent's global instruction file at `~/.agents/AGENTS.md`.
+ *
+ * Same fan-out shape as the skills above, with one deliberate difference: a
+ * real file here is never moved aside. `link` may migrate a real `~/.agents/
+ * skills` dir into the store because that dir is this tool's own concern, but
+ * an agent's instruction file is prose someone wrote for themselves, and a
+ * tool that renames it to `.bak` to install its own has overstepped. The three
+ * states are: absent (link it), already ours (leave it), anything real (print
+ * the one-line import and change nothing).
+ *
+ * The import route is not a lesser fallback — it is how two sources of
+ * instruction coexist, and it is what makes this safe to run on a machine
+ * whose agents were configured by someone other than this tool.
+ */
+export function reconcileInstructions(dryRun: boolean): InstructionAction[] {
+  const out: InstructionAction[] = [];
+
+  for (const def of distributionTargets()) {
+    const at = def.instructions;
+    if (at === undefined) continue; // unknown location — see AgentDef.instructions
+
+    const state = inspectLink(at, AGENTS_MD);
+    switch (state.kind) {
+      case "linked-correctly":
+        out.push({ kind: "ok", agent: def.agent, at });
+        break;
+      case "missing":
+        if (!dryRun) {
+          fs.mkdirSync(path.dirname(at), { recursive: true });
+          symlinkSync(path.relative(path.dirname(at), AGENTS_MD), at);
+        }
+        out.push({ kind: "linked", agent: def.agent, at });
+        break;
+      case "linked-elsewhere":
+        // A symlink holds no bytes of its own, so repointing loses nothing.
+        if (!dryRun) {
+          fs.unlinkSync(at);
+          symlinkSync(path.relative(path.dirname(at), AGENTS_MD), at);
+        }
+        out.push({ kind: "repointed", agent: def.agent, at, was: state.target });
+        break;
+      default:
+        out.push({ kind: "manual", agent: def.agent, at });
+        break;
+    }
+  }
+  return out;
+}
+
+/** Print the instruction fan-out. Always true: `manual` is advice, not failure. */
+export function printInstructions(actions: InstructionAction[], dryRun: boolean): boolean {
+  if (actions.length === 0) return true;
+  const lead = dryRun ? "would " : "";
+
+  for (const a of actions) {
+    if (a.kind === "linked") console.log(`  ${lead}link      ${a.agent}: ${tilde(a.at)}`);
+    else if (a.kind === "repointed") console.log(`  ${lead}repoint   ${a.agent}: ${tilde(a.at)} (was ${tilde(a.was)})`);
+    else if (a.kind === "manual") {
+      console.log(`  keep      ${a.agent}: ${tilde(a.at)} already exists — not touched`);
+      console.log(`    to load the store's AGENTS.md too, add this line to it:`);
+      console.log(`      @${tilde(AGENTS_MD)}`);
+    }
+  }
+  return true;
 }

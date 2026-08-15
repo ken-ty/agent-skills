@@ -52,6 +52,27 @@ const isInside = (p: string, dir: string): boolean => {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 };
 
+/**
+ * Line count above which a SKILL.md is worth splitting.
+ *
+ * Not a correctness rule — nothing breaks. But SKILL.md is loaded whole the
+ * moment the skill is picked, while files beside it (`references/`) are read
+ * only if the agent goes looking. A long body therefore charges every
+ * invocation for detail most of them never use. The number is a prompt to
+ * look, not a threshold with meaning; skills that are genuinely one long
+ * procedure are fine to leave.
+ */
+const SKILL_MD_SOFT_LIMIT = 250;
+
+/** Lines in a skill's SKILL.md, or 0 when it cannot be read. */
+function skillMdLines(name: string): number {
+  try {
+    return fs.readFileSync(path.join(storeSkills(), name, "SKILL.md"), "utf8").split("\n").length;
+  } catch {
+    return 0;
+  }
+}
+
 /** A skill is only discoverable by agents if it has a SKILL.md at its root. */
 const loadable = (dir: string, name: string): boolean =>
   fs.existsSync(path.join(dir, name, "SKILL.md"));
@@ -270,6 +291,15 @@ function checkSkills(tracked: string[], catalog: Catalog | null): void {
       bad(`${label} not in catalog.json — record its kind / author / refs there`);
     } else {
       ok(label);
+      // `own` only: splitting a remote skill is undone by the next `sync`, and
+      // a vendored one is someone else's structure to keep, not ours to edit.
+      const lines = kind === "own" ? skillMdLines(name) : 0;
+      if (lines > SKILL_MD_SOFT_LIMIT) {
+        warn(
+          `${label}: SKILL.md is ${lines} lines — every invocation pays for all of it. ` +
+            `Move the detail an agent only sometimes needs into ${name}/references/`,
+        );
+      }
     }
   }
 

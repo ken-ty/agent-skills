@@ -9,7 +9,13 @@
  * command — it exists for when you have just enabled an agent and want the
  * links now, without a fetch.
  */
-import { distributableNames, printFanOut, reconcileFanOut } from "./lib/fanout.ts";
+import {
+  distributableNames,
+  printFanOut,
+  printInstructions,
+  reconcileFanOut,
+  reconcileInstructions,
+} from "./lib/fanout.ts";
 import { storeSkills, tilde } from "./lib/paths.ts";
 
 const dryRun = process.argv.includes("--dry-run") || process.argv.includes("-n");
@@ -25,7 +31,13 @@ function main(): void {
 
   console.log(`store: ${names.length} loadable skill(s)`);
   const report = reconcileFanOut(names, dryRun);
-  if (!printFanOut(report, dryRun)) process.exitCode = 1;
+  const ok = printFanOut(report, dryRun);
+
+  // Skills load on demand; AGENTS.md loads every session. Same fan-out, same
+  // enabled set, different clobber rule — see reconcileInstructions.
+  printInstructions(reconcileInstructions(dryRun), dryRun);
+
+  if (!ok) process.exitCode = 1;
 }
 
 main();

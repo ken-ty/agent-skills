@@ -32,6 +32,18 @@ export function storeLock(): string {
 }
 
 /**
+ * The global instruction file, read by every agent in every session.
+ *
+ * Not a skill, and deliberately not under `skills/`: a skill loads on demand
+ * when its description matches, while this is unconditional context. It lives
+ * in the store anyway so the pre-commit audit covers it — of everything here,
+ * this is the file a leaked secret would reach the furthest from.
+ */
+export function storeAgentsMd(): string {
+  return path.join(storeRoot(), "agents", "AGENTS.md");
+}
+
+/**
  * Provenance for *every* skill, own or 3rd-party: author, reference URLs, how it
  * got here. Owned by the store repo alone — `npx skills` never reads or writes it.
  *
@@ -116,16 +128,23 @@ export const HOME: string = homedir();
 export const AGENTS_DIR: string = path.join(HOME, ".agents");
 export const AGENTS_SKILLS: string = path.join(AGENTS_DIR, "skills");
 export const AGENTS_LOCK: string = path.join(AGENTS_DIR, ".skill-lock.json");
+export const AGENTS_MD: string = path.join(AGENTS_DIR, "AGENTS.md");
 
 /**
- * The two links the tool owns, pointing `~/.agents` at the configured store.
+ * The three links the tool owns, pointing `~/.agents` at the configured store.
  * The per-agent fan-out below it (~/.claude/skills, ~/.codex/skills, ...) is
  * owned by lib/agents.ts + lib/fanout.ts — see `agent-skills agents`.
+ *
+ * `agents.md` is the hub link only. Pointing each agent's own instruction file
+ * at it (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, …) is not done here: the
+ * filename differs per agent, and writing into an agent's dir uninvited is the
+ * thing lib/agents.ts exists to prevent. Link those by hand, or opt in later.
  */
 export function links(): ReadonlyArray<{ label: string; from: string; to: string }> {
   return [
     { label: "skills", from: AGENTS_SKILLS, to: storeSkills() },
     { label: "lock", from: AGENTS_LOCK, to: storeLock() },
+    { label: "agents.md", from: AGENTS_MD, to: storeAgentsMd() },
   ];
 }
 
