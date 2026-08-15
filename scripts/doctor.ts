@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  AGENTS_MD,
   HOOKS_DIR_NAME,
   HOOK_TEMPLATE,
   SKILL_KINDS,
@@ -40,7 +41,8 @@ import {
   tilde,
 } from "./lib/paths.ts";
 import { CONFIG_PATH, STORE_ENV, overrideStore, resolveStoreOrNull } from "./lib/store.ts";
-import { agentSettings } from "./lib/agents.ts";
+import { type AgentSetting, agentSettings } from "./lib/agents.ts";
+import { IMPORT_LINE, importsStore } from "./lib/fanout.ts";
 
 const repoMode = process.argv.includes("--repo");
 
@@ -418,7 +420,44 @@ function checkFanOut(expected: string[]): void {
   if (off.length > 0) {
     ok(`not distributed to: ${off.map((s) => s.def.agent).join(", ")} — \`agent-skills agents\` to change`);
   }
+  checkInstructions(settings);
   console.log("");
+}
+
+/**
+ * The other half of the fan-out: each agent's global instruction file.
+ *
+ * Easy to leave unchecked, and the most expensive thing to leave unchecked.
+ * The hub link (`~/.agents/AGENTS.md`) is covered by `links()`, so a broken
+ * chain there is loud — but the per-agent end is what a session actually
+ * reads, and losing it is silent. The agent simply starts every session
+ * without the instructions and behaves as if they were never written.
+ *
+ * Two wirings count as healthy: a symlink to the hub, or a real file that
+ * imports it. The second is how this coexists with an instruction file its
+ * owner wrote, and on Windows it may be the only one available.
+ */
+function checkInstructions(settings: AgentSetting[]): void {
+  for (const { def, enabled } of settings) {
+    const at = def.instructions;
+    if (!enabled || at === undefined) continue;
+
+    const state = inspectLink(at, AGENTS_MD);
+    if (state.kind === "linked-correctly") {
+      ok(`${def.agent}: ${tilde(at)} -> the store's AGENTS.md`);
+    } else if (state.kind === "missing") {
+      bad(`${def.agent}: ${tilde(at)} missing — run \`agent-skills distribute\``);
+    } else if (state.kind === "linked-elsewhere") {
+      bad(`${def.agent}: ${tilde(at)} -> ${tilde(state.target)} (not this store)`);
+    } else if (importsStore(at)) {
+      ok(`${def.agent}: ${tilde(at)} imports the store's AGENTS.md`);
+    } else {
+      warn(
+        `${def.agent}: ${tilde(at)} exists but does not load the store — ` +
+          `add \`${IMPORT_LINE}\` to it, or delete it and run \`agent-skills distribute\``,
+      );
+    }
+  }
 }
 
 /**

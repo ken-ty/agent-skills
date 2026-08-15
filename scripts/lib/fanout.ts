@@ -168,9 +168,63 @@ export function printFanOut(report: FanOutReport, dryRun: boolean): boolean {
 
 export type InstructionAction =
   | { kind: "linked"; agent: string; at: string }
+  | { kind: "imported"; agent: string; at: string }
   | { kind: "ok"; agent: string; at: string }
   | { kind: "repointed"; agent: string; at: string; was: string }
   | { kind: "manual"; agent: string; at: string };
+
+/**
+ * The line that makes an agent read the store's AGENTS.md without a symlink.
+ *
+ * Every agent that reads a Markdown instruction file supports `@path` imports,
+ * so this is a real second wiring, not a note to the user. Exported because
+ * `doctor` looks for it: a hand-written instruction file carrying this line is
+ * wired, and reporting it as unwired would be wrong.
+ */
+export const IMPORT_LINE = `@${tilde(AGENTS_MD)}`;
+
+/**
+ * Whether a real instruction file already pulls the store in with `@`.
+ *
+ * Both spellings count. `~` is what this tool writes and what it tells people
+ * to add — it survives a different `$HOME`, and the agents that read these
+ * files expand it. An absolute path is equally valid though, and is what
+ * someone copying from a shell prompt tends to end up with. Matching only one
+ * form would report a wired file as unwired and send its owner to add a line
+ * that is already there.
+ */
+export function importsStore(at: string): boolean {
+  let text: string;
+  try {
+    text = fs.readFileSync(at, "utf8");
+  } catch {
+    return false;
+  }
+  return text.includes(IMPORT_LINE) || text.includes(`@${AGENTS_MD}`);
+}
+
+/**
+ * Draw the link, or fall back to an import file where symlinks are unavailable.
+ *
+ * Windows needs a privilege for symlinks that a normal account only holds with
+ * Developer Mode on. For skills there is no way around it — an agent expects a
+ * directory it can traverse. An instruction file is different: one line of
+ * Markdown does the same job, so failing the whole fan-out over a privilege
+ * would be a choice, not a constraint. Try the link first anyway; where it
+ * works it stays a single source with nothing to drift.
+ */
+function linkOrImport(at: string): "linked" | "imported" {
+  fs.mkdirSync(path.dirname(at), { recursive: true });
+  try {
+    symlinkSync(path.relative(path.dirname(at), AGENTS_MD), at);
+    return "linked";
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "EPERM" && code !== "EACCES") throw err;
+    fs.writeFileSync(at, `${IMPORT_LINE}\n`, "utf8");
+    return "imported";
+  }
+}
 
 /**
  * Point each enabled agent's global instruction file at `~/.agents/AGENTS.md`.
@@ -199,23 +253,27 @@ export function reconcileInstructions(dryRun: boolean): InstructionAction[] {
       case "linked-correctly":
         out.push({ kind: "ok", agent: def.agent, at });
         break;
-      case "missing":
-        if (!dryRun) {
-          fs.mkdirSync(path.dirname(at), { recursive: true });
-          symlinkSync(path.relative(path.dirname(at), AGENTS_MD), at);
-        }
-        out.push({ kind: "linked", agent: def.agent, at });
+      case "missing": {
+        // Dry run cannot know whether the symlink would be permitted, so it
+        // reports the intended action. "linked" is the honest guess: the
+        // fallback only fires on a privilege error we have not hit yet.
+        const how = dryRun ? "linked" : linkOrImport(at);
+        out.push({ kind: how, agent: def.agent, at });
         break;
+      }
       case "linked-elsewhere":
         // A symlink holds no bytes of its own, so repointing loses nothing.
         if (!dryRun) {
           fs.unlinkSync(at);
-          symlinkSync(path.relative(path.dirname(at), AGENTS_MD), at);
+          linkOrImport(at);
         }
         out.push({ kind: "repointed", agent: def.agent, at, was: state.target });
         break;
       default:
-        out.push({ kind: "manual", agent: def.agent, at });
+        // A real file that already imports the store is wired, by the second
+        // route rather than the first. Telling its owner to add a line they
+        // already have would be noise, and would read as if it had not worked.
+        out.push({ kind: importsStore(at) ? "ok" : "manual", agent: def.agent, at });
         break;
     }
   }
@@ -229,11 +287,12 @@ export function printInstructions(actions: InstructionAction[], dryRun: boolean)
 
   for (const a of actions) {
     if (a.kind === "linked") console.log(`  ${lead}link      ${a.agent}: ${tilde(a.at)}`);
+    else if (a.kind === "imported") console.log(`  import    ${a.agent}: ${tilde(a.at)} (symlink not permitted here)`);
     else if (a.kind === "repointed") console.log(`  ${lead}repoint   ${a.agent}: ${tilde(a.at)} (was ${tilde(a.was)})`);
     else if (a.kind === "manual") {
       console.log(`  keep      ${a.agent}: ${tilde(a.at)} already exists — not touched`);
       console.log(`    to load the store's AGENTS.md too, add this line to it:`);
-      console.log(`      @${tilde(AGENTS_MD)}`);
+      console.log(`      ${IMPORT_LINE}`);
     }
   }
   return true;
