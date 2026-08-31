@@ -110,7 +110,7 @@ audit フックを設置する。
 | `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成し、有効なエージェントへ symlink を配る |
 | `agent-skills agents` | どのエージェントへ配るかの一覧と現在の状態 (read-only)。`enable <name>` / `disable <name>` で切り替え |
 | `agent-skills distribute` | 有効なエージェントのディレクトリを store に合わせる (`--dry-run` 可) |
-| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
+| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突・**frontmatter のクラウド配布適合**・**スキル一覧の予算超過**を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 | `agent-skills share <name>` | スキルを 1 本だけ**外部の人に渡す**。既定は期限つきの一時共有、`--keep` で恒久共有 (`--dry-run` 可) |
