@@ -17,6 +17,7 @@
  *     to refuse one. Those stay in the full run.
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   AGENTS_MD,
@@ -24,6 +25,7 @@ import {
   HOOK_TEMPLATE,
   SKILL_KINDS,
   type Catalog,
+  frontmatter,
   gitHooksPath,
   gitToplevel,
   gitTrackedUnder,
@@ -310,6 +312,184 @@ function checkSkills(tracked: string[], catalog: Catalog | null): void {
 }
 
 /**
+ * The six frontmatter fields the Agent Skills spec allows.
+ *
+ * Claude Code accepts far more (`disable-model-invocation`, `argument-hint`,
+ * `model`, ...), but claude.ai uploads, the Skills API and `package_skill.py`
+ * validate against this list and **fail hard** on anything else rather than
+ * ignoring it. So a skill can work perfectly here and be impossible to push.
+ * `agent-skills push` is where that surfaces, which is late.
+ *
+ * https://code.claude.com/docs/en/skills
+ */
+const SPEC_FIELDS = new Set([
+  "name",
+  "description",
+  "license",
+  "compatibility",
+  "metadata",
+  "allowed-tools",
+]);
+
+/** Per-entry cap on `description` + `when_to_use` in the skill listing. */
+const LISTING_ENTRY_CAP = 1536;
+
+/** Claude Code's default share of the context window spent on the listing. */
+const LISTING_BUDGET_FRACTION = 0.01;
+
+/**
+ * Context window assumed when converting the fraction to characters. Only used
+ * to turn a ratio into a number a human can act on; the ratio is what the
+ * setting actually controls.
+ */
+const ASSUMED_CONTEXT_WINDOW = 200_000;
+
+/** A skill's `description`, or "" when it has none or cannot be read. */
+function skillDescription(name: string): string {
+  try {
+    const md = fs.readFileSync(path.join(storeSkills(), name, "SKILL.md"), "utf8");
+    return frontmatter(md).description ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Frontmatter that works locally but cannot leave the machine.
+ *
+ * Reported for every kind, not just `own`: the fix for a remote skill is "don't
+ * push this one", which you can only decide if you know. Always a warning —
+ * nothing is broken until someone actually pushes.
+ */
+function checkSpecFields(catalog: Catalog | null): void {
+  console.log("frontmatter (cloud distribution)");
+  const entries = catalog?.skills ?? {};
+  let flagged = 0;
+
+  for (const name of presentSkillNames()) {
+    if (!hasSkillMd(name)) continue;
+    let fields: string[];
+    try {
+      const md = fs.readFileSync(path.join(storeSkills(), name, "SKILL.md"), "utf8");
+      fields = Object.keys(frontmatter(md));
+    } catch {
+      continue;
+    }
+    const extra = fields.filter((f) => !SPEC_FIELDS.has(f));
+    if (extra.length === 0) continue;
+    flagged++;
+    const kind = entries[name]?.kind ?? "own";
+    warn(
+      `${name} (${kind}): ${extra.join(", ")} — not in the spec's six fields, so ` +
+        "`agent-skills push` and claude.ai upload fail on it (Claude Code is fine)",
+    );
+  }
+
+  if (flagged === 0) ok("every skill sticks to the spec's six fields — all are pushable");
+  console.log("");
+}
+
+/**
+ * Descriptions share one budget, and overflowing it silently disables skills.
+ *
+ * Claude Code loads every skill's name and description into context on every
+ * session. That listing has a single budget — 1% of the context window by
+ * default. When it overflows, descriptions are dropped starting with the
+ * skills invoked least, and a skill listed without a description can no longer
+ * be matched to a request: it stops firing automatically. Nothing errors, and
+ * `list` still shows it, so the store looks healthy while a third of it is
+ * unreachable.
+ *
+ * This is the opposite of the SKILL.md line count above. A long body is paid
+ * for only when that skill runs; a long description is paid for by every
+ * session, and it is charged against every *other* skill too. Adding a skill
+ * is therefore not free for the ones already there.
+ *
+ * Full run only: the budget depends on `~/.claude/settings.json`, which is
+ * $HOME wiring, and on remote bodies that a fresh clone has not synced yet.
+ * Neither says anything about whether a commit is sound.
+ */
+function checkListingBudget(): void {
+  console.log("skill listing budget");
+
+  const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
+  let overrides: Record<string, string> = {};
+  let fraction = LISTING_BUDGET_FRACTION;
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const s = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
+        skillOverrides?: Record<string, string>;
+        skillListingBudgetFraction?: number;
+      };
+      overrides = s.skillOverrides ?? {};
+      if (typeof s.skillListingBudgetFraction === "number") {
+        fraction = s.skillListingBudgetFraction;
+      }
+    } catch {
+      warn(`${tilde(settingsPath)} is not valid JSON — assuming defaults`);
+    }
+  }
+
+  let total = 0;
+  let withDesc = 0;
+  let nameOnly = 0;
+  let hidden = 0;
+  const overCap: string[] = [];
+  const sizes: Array<{ name: string; size: number }> = [];
+
+  for (const name of presentSkillNames()) {
+    if (!hasSkillMd(name)) continue;
+    const state = overrides[name] ?? "on";
+    if (state === "off" || state === "user-invocable-only") {
+      hidden++;
+      continue;
+    }
+    // `name-only` still occupies a listing row, just without the description —
+    // which is the point: it frees budget for the skills that need theirs.
+    const desc = state === "name-only" ? "" : skillDescription(name);
+    if (state === "name-only") nameOnly++;
+    else withDesc++;
+    if (desc.length > LISTING_ENTRY_CAP) overCap.push(`${name} (${desc.length})`);
+    // One listing entry is roughly "name: description".
+    const size = name.length + 2 + Math.min(desc.length, LISTING_ENTRY_CAP);
+    total += size;
+    sizes.push({ name, size });
+  }
+
+  const budget = Math.round(ASSUMED_CONTEXT_WINDOW * fraction);
+  const parts = [`${withDesc} with descriptions`];
+  if (nameOnly > 0) parts.push(`${nameOnly} name-only`);
+  if (hidden > 0) parts.push(`${hidden} hidden`);
+  const shown = parts.join(", ");
+
+  if (total <= budget) {
+    ok(`${total} chars across ${shown} — fits the ${budget}-char budget (fraction ${fraction})`);
+  } else {
+    warn(
+      `${total} chars across ${shown} exceeds the ${budget}-char budget ` +
+        `(fraction ${fraction} of a ${ASSUMED_CONTEXT_WINDOW} context window) — ` +
+        "Claude Code drops descriptions from the least-used skills, and a skill " +
+        "listed without one stops firing automatically",
+    );
+    const worst = sizes
+      .sort((a, b) => b.size - a.size)
+      .slice(0, 5)
+      .map((s) => `${s.name} (${s.size})`)
+      .join(", ");
+    warn(`heaviest: ${worst}`);
+    warn(
+      "shrink the descriptions, hide what this machine does not need with " +
+        "`skillOverrides` (`name-only`), or raise `skillListingBudgetFraction`",
+    );
+  }
+
+  for (const s of overCap) {
+    warn(`${s} chars of description — truncated at ${LISTING_ENTRY_CAP}; put the key use case first`);
+  }
+  console.log("");
+}
+
+/**
  * Remote bodies must never be tracked by git.
  *
  * `skills/.gitignore` is generated by `sync`, so between `npx skills add` and
@@ -565,6 +745,8 @@ function repoMain(): void {
   const tracked = checkLock();
   const catalog = checkCatalog();
   checkSkills(tracked, catalog);
+  // Reads skill bodies only, so it is a fair question to ask of a commit.
+  checkSpecFields(catalog);
   checkRemoteTracking(tracked);
   summarise();
 }
@@ -586,6 +768,10 @@ function main(): void {
   const tracked = checkLock();
   const catalog = checkCatalog();
   checkSkills(tracked, catalog);
+  checkSpecFields(catalog);
+  // Depends on ~/.claude/settings.json and on remote bodies being synced, so it
+  // belongs with the rest of the $HOME wiring rather than in --repo.
+  checkListingBudget();
   checkRemoteTracking(tracked);
   // Only loadable skills are expected downstream — one without a SKILL.md is
   // already reported above, and linking it would not help.
