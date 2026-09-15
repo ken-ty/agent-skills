@@ -10,8 +10,12 @@
 #
 # It delegates to the installed `agent-skills` command. Both subcommands act on
 # the git repo they are invoked in (this store, or a worktree of it), not on
-# whatever store this machine has configured. Falls back to `skill` if only that
-# alias is on PATH.
+# whatever store this machine has configured.
+#
+# Only the `agent-skills` name is tried. The installers always create the
+# `skill` alias alongside it, so `skill` alone never means a working install —
+# and on Linux, procps ships /usr/bin/skill (a kill(1) variant), so falling back
+# to it would signal processes named "audit" instead of auditing anything.
 #
 #   audit        secrets and machine-specific data in the staged content
 #   doctor --repo   catalog / skills.lock / skill bodies still agree
@@ -22,14 +26,10 @@
 # `git commit --no-verify` bypasses this. That is git's design, not an
 # oversight: this hook is a backstop against mistakes, not a security boundary.
 set -e
-if command -v agent-skills >/dev/null 2>&1; then
-  CLI=agent-skills
-elif command -v skill >/dev/null 2>&1; then
-  CLI=skill
-else
+if ! command -v agent-skills >/dev/null 2>&1; then
   echo "pre-commit: agent-skills not on PATH — run the CLI's install.sh" >&2
   exit 1
 fi
 
-"$CLI" audit
-exec "$CLI" doctor --repo
+agent-skills audit
+exec agent-skills doctor --repo
