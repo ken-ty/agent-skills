@@ -21,10 +21,13 @@ import os from "node:os";
 import path from "node:path";
 import {
   AGENTS_MD,
+  CLAUDE_DIR,
   HOOKS_DIR_NAME,
   HOOK_TEMPLATE,
   SKILL_KINDS,
   type Catalog,
+  claudeConfigFiles,
+  copyState,
   frontmatter,
   gitHooksPath,
   gitToplevel,
@@ -36,6 +39,7 @@ import {
   readCatalog,
   readLock,
   storeCatalog,
+  storeClaudeDir,
   storeLock,
   storeRoot,
   storeSkills,
@@ -641,6 +645,64 @@ function checkInstructions(settings: AgentSetting[]): void {
 }
 
 /**
+ * The store's `claude/`, as copied into `~/.claude` by `distribute`.
+ *
+ * A copy, unlike a link, can be right today and wrong tomorrow without
+ * anything on this machine having moved: the store commits a new settings.json,
+ * or Claude Code rewrites its own. Neither is a fault, which is why drift is a
+ * warn — but it is invisible until something compares the two, and this is the
+ * only place that does. The report names both files so the diff is one command
+ * away, and leaves the choice of direction to the reader.
+ *
+ * Skipped, not reported, when claude-code is not a target: the section would
+ * describe files no enabled agent reads. A store without `claude/` is reported
+ * in one line, because "nothing to copy" and "did not look" are different.
+ */
+function checkClaudeConfig(settings: AgentSetting[]): void {
+  if (!settings.some((s) => s.enabled && s.def.agent === "claude-code")) return;
+  console.log("claude config (copied by `agent-skills distribute`)");
+
+  const src = storeClaudeDir();
+  if (!fs.existsSync(src)) {
+    ok(`${tilde(src)} not present — nothing to copy into ${tilde(CLAUDE_DIR)}`);
+    console.log("");
+    return;
+  }
+
+  const files = claudeConfigFiles();
+  if (files.length === 0) ok(`${tilde(src)} holds nothing to copy`);
+  for (const f of files) {
+    switch (copyState(f)) {
+      case "identical":
+        ok(`${f.rel}: ${tilde(f.to)} matches the store`);
+        // Content can match while the mode does not, and a hook without its x
+        // bit is silently never run. `distribute` copies the mode; a hand copy
+        // may not have.
+        if (f.rel.startsWith("hooks" + path.sep)) {
+          try {
+            fs.accessSync(f.to, fs.constants.X_OK);
+          } catch {
+            warn(`${f.rel}: ${tilde(f.to)} is not executable — \`chmod +x ${tilde(f.to)}\``);
+          }
+        }
+        break;
+      case "missing":
+        bad(`${f.rel}: ${tilde(f.to)} missing — run \`agent-skills distribute\``);
+        break;
+      case "differs":
+        warn(
+          `${f.rel}: ${tilde(f.to)} differs from the store — ` +
+            `\`diff ${tilde(f.to)} ${tilde(f.from)}\`; ` +
+            `keep it with \`cp ${tilde(f.to)} ${tilde(f.from)}\`, ` +
+            "or take the store's with `agent-skills distribute --force`",
+        );
+        break;
+    }
+  }
+  console.log("");
+}
+
+/**
  * A project's own skills lose to the global store on a name clash.
  *
  * Claude Code's precedence is enterprise > personal > project, so a skill in
@@ -776,6 +838,9 @@ function main(): void {
   // Only loadable skills are expected downstream — one without a SKILL.md is
   // already reported above, and linking it would not help.
   checkFanOut(presentSkillNames().filter(hasSkillMd));
+  // The copy, not a link, so it can drift with nothing on this machine having
+  // moved — and like the fan-out it lives in $HOME, so it stays out of --repo.
+  checkClaudeConfig(agentSettings());
   checkProjectSkills();
   checkSurfaces();
   summarise();

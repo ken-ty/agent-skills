@@ -13,7 +13,18 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { AGENTS_MD, AGENTS_SKILLS, inspectLink, storeSkills, tilde } from "./paths.ts";
+import {
+  AGENTS_MD,
+  AGENTS_SKILLS,
+  CLAUDE_DIR,
+  type ClaudeConfigFile,
+  claudeConfigFiles,
+  copyState,
+  inspectLink,
+  storeClaudeDir,
+  storeSkills,
+  tilde,
+} from "./paths.ts";
 import { type AgentDef, distributionTargets, linkTarget } from "./agents.ts";
 import { symlinkSync } from "./symlink.ts";
 
@@ -293,6 +304,91 @@ export function printInstructions(actions: InstructionAction[], dryRun: boolean)
       console.log(`  keep      ${a.agent}: ${tilde(a.at)} already exists — not touched`);
       console.log(`    to load the store's AGENTS.md too, add this line to it:`);
       console.log(`      ${IMPORT_LINE}`);
+    }
+  }
+  return true;
+}
+
+export type ClaudeConfigAction =
+  | { kind: "copy"; file: ClaudeConfigFile }
+  | { kind: "ok"; file: ClaudeConfigFile }
+  | { kind: "drift"; file: ClaudeConfigFile }
+  | { kind: "overwrite"; file: ClaudeConfigFile };
+
+/** Copy one file, keeping its mode — a hook that loses its x bit is a hook that never runs. */
+function copyPreservingMode(f: ClaudeConfigFile): void {
+  fs.mkdirSync(path.dirname(f.to), { recursive: true });
+  fs.copyFileSync(f.from, f.to);
+  fs.chmodSync(f.to, fs.statSync(f.from).mode);
+}
+
+/**
+ * Copy the store's `claude/` into `~/.claude`, for the files that are not
+ * already there.
+ *
+ * The third fan-out, and the only one that copies. The clobber rule is the
+ * strictest of the three: a file that differs is never touched, whichever side
+ * changed, because the bytes cannot tell a store update apart from an edit
+ * Claude Code made to its own settings. Both are legitimate, and only the
+ * person running this knows which one they want to keep — `cp` it back into
+ * the store, or `--force` the store's version over it. `force` therefore
+ * replaces `drift` with `overwrite` and nothing else.
+ *
+ * Null, and no report, in two cases that are not problems: claude-code is not
+ * an enabled target (the files are Claude Code's own, so they follow that
+ * switch and no other), or the store has no `claude/` yet — a store from
+ * before this existed is not misconfigured, and must keep working unchanged.
+ */
+export function reconcileClaudeConfig(
+  dryRun: boolean,
+  force: boolean,
+): ClaudeConfigAction[] | null {
+  if (!distributionTargets().some((d) => d.agent === "claude-code")) return null;
+  if (!fs.existsSync(storeClaudeDir())) return null;
+
+  const out: ClaudeConfigAction[] = [];
+  for (const file of claudeConfigFiles()) {
+    switch (copyState(file)) {
+      case "identical":
+        out.push({ kind: "ok", file });
+        break;
+      case "missing":
+        if (!dryRun) copyPreservingMode(file);
+        out.push({ kind: "copy", file });
+        break;
+      case "differs":
+        if (!force) {
+          out.push({ kind: "drift", file });
+          break;
+        }
+        if (!dryRun) copyPreservingMode(file);
+        out.push({ kind: "overwrite", file });
+        break;
+    }
+  }
+  return out;
+}
+
+/** Print the config copy. Always true: like `manual` above, `drift` is advice, not failure. */
+export function printClaudeConfig(actions: ClaudeConfigAction[] | null, dryRun: boolean): boolean {
+  if (actions === null) return true;
+  const lead = dryRun ? "would " : "";
+
+  console.log("");
+  console.log(
+    `claude config: ${actions.length} file(s) in ${tilde(storeClaudeDir())} -> ${tilde(CLAUDE_DIR)} (copied, not linked)`,
+  );
+  for (const a of actions) {
+    const { rel, to } = a.file;
+    if (a.kind === "ok") console.log(`  ok        ${rel}`);
+    else if (a.kind === "copy") console.log(`  ${lead}copy      ${rel} -> ${tilde(to)}`);
+    else if (a.kind === "overwrite") {
+      console.log(`  ${lead}overwrite ${rel} -> ${tilde(to)} — the local changes are lost`);
+    } else {
+      console.log(`  drift     ${rel}: ${tilde(to)} differs from the store — not touched`);
+      console.log("    `agent-skills doctor` shows where; keep the local edit with");
+      console.log(`      cp ${tilde(to)} ${tilde(a.file.from)}`);
+      console.log("    or take the store's version with `agent-skills distribute --force`");
     }
   }
   return true;
