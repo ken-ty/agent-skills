@@ -13,8 +13,10 @@ git リポジトリ (= store) に集約し、各エージェント (Claude Code 
 ツールはどの store を操作するかを `~/.config/agent-skills/config.json`（`agent-skills init`/`link`
 が書く）から読む。`AGENT_SKILLS_STORE` 環境変数で上書きできる。
 
-取得と各エージェントへの配布は [`skills` CLI](https://github.com/vercel-labs/skills) に委譲している。
-このツールが持つのは `~/.agents/` を store へ向ける 2 本の symlink と、来歴 (`catalog.json`) の検査だけ。
+取得は [`skills` CLI](https://github.com/vercel-labs/skills) に委譲している。このツールが持つのは
+`~/.agents/` を store へ向ける 3 本の symlink（`skills` / `.skill-lock.json` / `AGENTS.md`）、
+有効なエージェントへのファンアウト、store の `claude/` を `~/.claude` へ**コピー**する配布、
+来歴 (`catalog.json`) の検査。
 
 ## インストール
 
@@ -107,10 +109,10 @@ audit フックを設置する。
 | `agent-skills init <dir>` | 空の store を scaffold し、`link` して配線する |
 | `agent-skills link <dir>` | 既存 store を config に登録し、`~/.agents` を向け、hook を設置 (冪等、`--dry-run` 可) |
 | `agent-skills list` | store のスキルを kind ごとに一覧 (read-only) |
-| `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成し、有効なエージェントへ symlink を配る |
+| `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成し、有効なエージェントへ symlink を配り、store の `claude/` で `~/.claude` に無いファイルをコピーする |
 | `agent-skills agents` | どのエージェントへ配るかの一覧と現在の状態 (read-only)。`enable <name>` / `disable <name>` で切り替え |
-| `agent-skills distribute` | 有効なエージェントのディレクトリを store に合わせる (`--dry-run` 可) |
-| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突・**frontmatter のクラウド配布適合**・**スキル一覧の予算超過**を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
+| `agent-skills distribute` | 有効なエージェントのディレクトリを store に合わせ、store の `claude/` を `~/.claude` へコピーする (`--dry-run` 可、drift したコピーを store で上書きするなら `--force`) |
+| `agent-skills doctor` | store・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・**`~/.claude` へのコピーの drift**・実行したツリーの `.claude/skills` との同名衝突・**frontmatter のクラウド配布適合**・**スキル一覧の予算超過**を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 | `agent-skills share <name>` | スキルを 1 本だけ**外部の人に渡す**。既定は期限つきの一時共有、`--keep` で恒久共有 (`--dry-run` 可) |
@@ -144,6 +146,35 @@ copy モードで置いていく（2026-08-07 に実際に踏んだ）。ディ�
 スキルの残骸は、`~/.agents/skills` を指す symlink に限って掃除する。
 
 `warp` は `~/.agents/skills`（= store そのもの）を読むので配布対象にできない。`enable` してもエラーになる。
+
+### Claude Code の設定は symlink ではなくコピーで配る
+
+store の `claude/` に置いた Claude Code 固有の設定は、`claude-code` が有効なときだけ `~/.claude` へ
+**コピー**される（`distribute` と `sync` の末尾）。`README.md` は配らない。
+
+```text
+<store>/claude/settings.json    → ~/.claude/settings.json
+<store>/claude/hooks/<name>     → ~/.claude/hooks/<name>     (実行ビットを保つ)
+<store>/claude/agents/<name>.md → ~/.claude/agents/<name>.md
+```
+
+symlink にしないのは、**Claude Code 自身が `settings.json` を書き換える**ため（`/config`、
+バージョン移行）。symlink だとその書き込みが store の作業ツリーに未コミットの差分として現れ、
+誰も意図していない変更を抱えることになる。コピーなら両者は独立し、代わりにずれ (drift) を
+`doctor` が報告する。
+
+ファイルごとに 3 状態で、drift は**触らない**（失敗でもない）:
+
+| 状態 | `distribute` | `doctor` |
+| --- | --- | --- |
+| `~/.claude` に無い | `copy` | BAD |
+| 同一 | `ok` | ok |
+| 中身が違う (drift) | `drift` — 触らない | warn |
+
+drift をどちらに寄せるかは人が決める。ローカルの編集を残すなら `cp ~/.claude/<file> <store>/claude/<file>`
+で store に戻してコミットする。store 側を正とするなら `agent-skills distribute --force` で上書きする
+（上書き前に「ローカルの変更は失われる」と 1 行出す）。`sync` には `--force` が無い ── 自動で走る
+経路に上書きを持たせない。store に `claude/` が無ければ何もしない。
 
 ## サーフェスは 5 つあり、互いに同期しない
 
@@ -293,13 +324,16 @@ agent-skills ──操作──▶ agent-skills-store ──切り出し──�
   scripts/                             catalog.json             来歴 (このツールが検査)
     run.js  … Node 検査 + dispatch      skills.lock              取得 (npx skills が書く)
     init link list sync doctor audit    hooks/pre-commit → audit + `doctor --repo`
-    lib/{paths,store}.ts
-  hooks/pre-commit … store へ配る雛形
+    lib/{paths,store,agents,fanout}.ts agents/AGENTS.md         全エージェント共通の指示
+  hooks/pre-commit … store へ配る雛形    claude/                  Claude Code 固有の設定 (settings.json, hooks/, agents/)
 
   ~/.config/agent-skills/config.json   { "store": "<path>" }   ← init/link が書く
   ~/.agents/skills           → <store>/skills                  ← ツールが張る
   ~/.agents/.skill-lock.json → <store>/skills.lock             ← ツールが張る
-  ~/.claude/skills/<name>    → ~/.agents/skills/<name>         ← npx skills が張る
+  ~/.agents/AGENTS.md        → <store>/agents/AGENTS.md        ← ツールが張る
+  ~/.claude/skills/<name>    → ~/.agents/skills/<name>         ← distribute が張る
+  ~/.claude/CLAUDE.md        → ~/.agents/AGENTS.md             ← distribute が張る
+  ~/.claude/{settings.json,hooks/,agents/}  ⇐ <store>/claude/  ← distribute がコピー (drift は doctor)
 ```
 
 詳細は [docs/architecture.md](docs/architecture.md)。
@@ -383,6 +417,8 @@ audit: 21 file(s) clean (built-in + gitleaks)
 - **`core.hooksPath unset`** — pre-commit 検査が動いていない。`agent-skills link`
 - **`pre-commit differs from the tool's template`** — ツール側の hook が更新され、store の
   コピーが古いまま。`agent-skills link` で入れ直す
+- **`<file>: ~/.claude/<file> differs from the store`** — コピーした Claude Code の設定がどちらかで
+  変わった。残すなら `cp` で store へ戻す。store を正とするなら `agent-skills distribute --force`
 - **`This repo needs Node >= 22.18`** — `nvm install 22` などで上げる
 - **(Windows) `npx skills add ... exited null`** — 起動できていない。`sync` は shell 経由で `npx` を
   呼ぶので、これが出るなら古い版。更新する

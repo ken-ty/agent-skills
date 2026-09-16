@@ -44,6 +44,86 @@ export function storeAgentsMd(): string {
 }
 
 /**
+ * Claude Code's own configuration, kept in the store so it is versioned and
+ * reaches every machine, but *copied* to `~/.claude` rather than linked.
+ *
+ * A symlink would be the obvious wiring — it is what AGENTS.md gets. It is
+ * wrong here because Claude Code writes `settings.json` itself (`/config`, its
+ * own migrations), and through a symlink every one of those writes lands in
+ * the store's working tree as an uncommitted change nobody made on purpose.
+ * A copy keeps the two apart; `doctor` reports when they no longer agree.
+ * `README.md` documents the directory and is not distributed.
+ */
+export function storeClaudeDir(): string {
+  return path.join(storeRoot(), "claude");
+}
+
+/** One file the store's `claude/` dir contributes, and where it lands. */
+export type ClaudeConfigFile = {
+  /** Path relative to both `claude/` and `~/.claude`, e.g. `hooks/notify`. */
+  rel: string;
+  /** Absolute source in the store. */
+  from: string;
+  /** Absolute destination under `~/.claude`. */
+  to: string;
+};
+
+/**
+ * Every file `claude/` distributes, in a fixed order.
+ *
+ * The layout is a contract with the store, not a directory walk: only the
+ * three shapes below are copied, so a stray file in `claude/` cannot land in
+ * `~/.claude` by accident. Empty when the store has no `claude/` at all —
+ * older stores predate it, and that must stay a no-op, not an error.
+ *
+ *   settings.json     -> ~/.claude/settings.json
+ *   hooks/<name>      -> ~/.claude/hooks/<name>      (mode preserved)
+ *   agents/<name>.md  -> ~/.claude/agents/<name>.md
+ */
+export function claudeConfigFiles(): ClaudeConfigFile[] {
+  const src = storeClaudeDir();
+  const out: ClaudeConfigFile[] = [];
+  const add = (rel: string): void => {
+    out.push({ rel, from: path.join(src, rel), to: path.join(CLAUDE_DIR, rel) });
+  };
+  const filesIn = (sub: string): string[] => {
+    try {
+      return fs
+        .readdirSync(path.join(src, sub), { withFileTypes: true })
+        .filter((e) => e.isFile() && !e.name.startsWith("."))
+        .map((e) => e.name)
+        .sort();
+    } catch {
+      return [];
+    }
+  };
+
+  if (fs.existsSync(path.join(src, "settings.json"))) add("settings.json");
+  for (const name of filesIn("hooks")) add(path.join("hooks", name));
+  for (const name of filesIn("agents")) {
+    if (name.endsWith(".md")) add(path.join("agents", name));
+  }
+  return out;
+}
+
+/**
+ * How a copied file relates to its source. `differs` is drift in either
+ * direction — the store moved on, or Claude Code (or a person) edited the copy
+ * — and the bytes alone cannot say which, so neither side is ever overwritten
+ * on that answer without being asked.
+ */
+export type CopyState = "missing" | "identical" | "differs";
+
+export function copyState(f: ClaudeConfigFile): CopyState {
+  if (!fs.existsSync(f.to)) return "missing";
+  try {
+    return fs.readFileSync(f.from).equals(fs.readFileSync(f.to)) ? "identical" : "differs";
+  } catch {
+    return "differs";
+  }
+}
+
+/**
  * Provenance for *every* skill, own or 3rd-party: author, reference URLs, how it
  * got here. Owned by the store repo alone — `npx skills` never reads or writes it.
  *
@@ -129,6 +209,8 @@ export const AGENTS_DIR: string = path.join(HOME, ".agents");
 export const AGENTS_SKILLS: string = path.join(AGENTS_DIR, "skills");
 export const AGENTS_LOCK: string = path.join(AGENTS_DIR, ".skill-lock.json");
 export const AGENTS_MD: string = path.join(AGENTS_DIR, "AGENTS.md");
+/** Claude Code's global dir. Its `skills/` entry is in lib/agents.ts; `claude/` copies land beside it. */
+export const CLAUDE_DIR: string = path.join(HOME, ".claude");
 
 /**
  * The three links the tool owns, pointing `~/.agents` at the configured store.

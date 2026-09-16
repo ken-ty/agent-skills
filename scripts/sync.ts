@@ -4,6 +4,7 @@
  *   2. regenerate skills/.gitignore so lockfile entries stay out of git
  *   3. report catalogued skills git should have restored (own / vendored)
  *   4. relink every enabled agent dir so it mirrors the store
+ *   5. copy the store's claude/ into ~/.claude where a file is missing
  *
  * Fetching is delegated to `npx skills` — this repo deliberately does not
  * reimplement acquisition. The fan-out in step 4 *is* ours: `npx skills` only
@@ -28,7 +29,13 @@ import {
   thirdPartyNames,
   tilde,
 } from "./lib/paths.ts";
-import { distributableNames, printFanOut, reconcileFanOut } from "./lib/fanout.ts";
+import {
+  distributableNames,
+  printClaudeConfig,
+  printFanOut,
+  reconcileClaudeConfig,
+  reconcileFanOut,
+} from "./lib/fanout.ts";
 
 const gitignorePath = (): string => path.join(storeSkills(), ".gitignore");
 const BEGIN = "# --- managed by scripts/sync.ts (do not edit) ---";
@@ -228,6 +235,11 @@ function main(): void {
 
   console.log("");
   if (!printFanOut(reconcileFanOut(distributableNames(), dryRun), dryRun)) process.exitCode = 1;
+
+  // Same tail as `distribute`, minus --force: sync never overwrites a copy that
+  // drifted, it only says so. Overwriting is a decision, and this command is
+  // the one that runs on autopilot.
+  printClaudeConfig(reconcileClaudeConfig(dryRun, false), dryRun);
 }
 
 main();

@@ -117,32 +117,62 @@ flowchart BT
     skills["skills/<br/><i>唯一の実体</i>"]
     lock["skills.lock<br/><i>取得 — npx skills が書く</i>"]
     catalog["catalog.json<br/><i>来歴 — ツールが検査</i>"]
+    agentsMdSrc["agents/AGENTS.md<br/><i>全エージェント共通の指示</i>"]
+    claudeDir["claude/<br/><i>Claude Code 固有の設定</i>"]
   end
 
   config["~/.config/agent-skills/config.json<br/><i>store のパス</i>"]
   agentsSkills["~/.agents/skills"]
   agentsLock["~/.agents/.skill-lock.json"]
+  agentsMd["~/.agents/AGENTS.md"]
   claude["~/.claude/skills/&lt;name&gt;<br/><i>per-skill symlink</i>"]
+  claudeMd["~/.claude/CLAUDE.md"]
+  claudeCfg["~/.claude/{settings.json, hooks/, agents/}<br/><i>コピー</i>"]
   others["~/.codex/skills/&lt;name&gt; ほか<br/><i>per-skill symlink (opt-in)</i>"]
 
   cli -.->|"読む/書く"| config
   config -.->|"指す"| store
   agentsSkills ==>|"symlink (ツールが張る)"| skills
   agentsLock ==>|"symlink (ツールが張る)"| lock
+  agentsMd ==>|"symlink (ツールが張る)"| agentsMdSrc
   claude -->|"symlink (distribute が張る)"| agentsSkills
+  claudeMd -->|"symlink (distribute が張る)"| agentsMd
+  claudeCfg -.->|"copy (distribute が写す, drift は doctor)"| claudeDir
   others -->|"symlink (distribute が張る)"| agentsSkills
 ```
 
-太線の 2 本がツールの持ち物 (`~/.agents/` を store へ向ける)。`catalog.json` に `~/.agents/`
+太線の 3 本がツールの持ち物 (`~/.agents/` を store へ向ける)。`catalog.json` に `~/.agents/`
 からの矢印が無いのは、参照されない store 専用ファイルだからで、欠落ではない。
 
-自前で管理するのは config 1 つと `~/.agents/` 配下の **2 本の symlink**、そして各エージェントへの
-**ファンアウト**（`agent-skills distribute`）。
+自前で管理するのは config 1 つと `~/.agents/` 配下の **3 本の symlink**、各エージェントへの
+**ファンアウト**（`agent-skills distribute`）、そして store の `claude/` を `~/.claude` へ写す
+**コピー配布**（同じく `distribute`）。
 
 ファンアウトは当初 `skills` CLI に任せていたが、それでは **CLI が入れたスキルしか配られない**。
 own と vendored は誰も張らないので、手で `ln -s` し忘れると store には在るのにエージェントからは
 見えない、という無言の欠落になる。配布先は `~/.config/agent-skills/config.json` の `agents` で
 明示的に opt-in する（既定は `claude-code` のみ）。取得は今も `skills` CLI に委譲する。
+
+### `claude/` だけはコピーで配る
+
+store の `claude/`（`settings.json` / `hooks/<name>` / `agents/<name>.md`。`README.md` は配らない）は
+`claude-code` が有効なときだけ `~/.claude` へ**コピー**する。他は全部 symlink なのに、ここだけ
+違うのは **Claude Code 自身が `settings.json` に書く**からだ。`/config` やバージョン移行が
+symlink 越しに書けば、store の作業ツリーに誰も意図していない未コミットの差分が積もる。
+コピーなら両者は独立し、代わりに「ずれた」という事実だけを `doctor` が報告する。
+
+3 状態しか無く、**中身が違うファイルには触らない**（`reconcileInstructions` の `manual` と同じで、
+助言であって失敗ではない）:
+
+- 無い → コピーする (`copy`)
+- 同一 → `ok`
+- 違う → `drift`。どちらが正しいかはバイト列からは分からない（store が進んだのか、Claude Code が
+  書いたのか）ので、人が決める。残すなら `cp` で store へ戻し、store を正とするなら
+  `distribute --force` で上書きする
+
+`sync` も末尾で同じ経路を通るが `--force` は持たない。自動で走る経路に上書きを持たせると、
+「ローカルで変えた設定が次の sync で消えた」が起きる。store に `claude/` が無ければ何もしないので、
+この仕組みより前の store でもそのまま動く。
 
 ## 配布先は 5 サーフェスあり、同期しない。届くのは 2 つだけ
 
