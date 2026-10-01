@@ -19,6 +19,7 @@
 #
 #   audit        secrets and machine-specific data in the staged content
 #   doctor --repo   catalog / skills.lock / skill bodies still agree
+#   pre-commit.d/*  the store's own checks (see below)
 #
 # audit runs first: a leaked secret is the worse outcome, and `set -e` means a
 # hit there stops the commit before the second check adds noise.
@@ -32,4 +33,18 @@ if ! command -v agent-skills >/dev/null 2>&1; then
 fi
 
 agent-skills audit
+
+# Store-specific checks: every executable in hooks/pre-commit.d/, in name order.
+# This file is a template that `link` overwrites, so a store's own checks (a
+# generated file being stale, a frontmatter schema) cannot live here — they go
+# in the drop-in directory, which link never touches. Each script runs from the
+# repo root; a non-zero exit stops the commit, like the two built-ins.
+top="$(git rev-parse --show-toplevel)"
+if [ -d "$top/hooks/pre-commit.d" ]; then
+  for check in "$top"/hooks/pre-commit.d/*; do
+    [ -f "$check" ] && [ -x "$check" ] || continue
+    (cd "$top" && "$check") || { echo "pre-commit: $(basename "$check") failed" >&2; exit 1; }
+  done
+fi
+
 exec agent-skills doctor --repo

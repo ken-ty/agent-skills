@@ -145,6 +145,8 @@ audit フックを設置する。
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 | `agent-skills share <name>` | スキルを 1 本だけ**外部の人に渡す**。既定は期限つきの一時共有、`--keep` で恒久共有 (`--dry-run` 可) |
 
+store 固有の検査（生成物の鮮度、frontmatter のスキーマなど）は store の `hooks/pre-commit.d/` に実行可能ファイルで置く。pre-commit は audit のあとに名前順で実行し、非 0 ならコミットを止める。`hooks/pre-commit` 自体は `link` が上書きするので、そこには書かない。
+
 `npm run <cmd>` でも同じものが動く（リポジトリ内でのみ）。`agent-skills`/`skill` はどこからでも。
 
 ## どのエージェントへ配るか
@@ -322,7 +324,7 @@ agent-skills ──操作──▶ agent-skills-store ──切り出し──�
   install.sh          ── 操作 ──▶      skills/.gitignore        remote=ignore (sync が管理)
   scripts/                             catalog.json             来歴 (このツールが検査)
     run.js  … Node 検査 + dispatch      skills.lock              取得 (npx skills が書く)
-    init link list sync doctor audit    hooks/pre-commit → audit + `doctor --repo`
+    init link list sync doctor audit    hooks/pre-commit → audit + store の hooks/pre-commit.d/* + `doctor --repo`
     lib/{paths,store}.ts
   hooks/pre-commit … store へ配る雛形
 
