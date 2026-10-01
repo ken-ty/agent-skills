@@ -16,6 +16,7 @@
  *     nothing about whether a commit is sound, and a broken symlink is no reason
  *     to refuse one. Those stay in the full run.
  */
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -120,6 +121,59 @@ function checkStore(): string | null {
   }
   console.log("");
   return store;
+}
+
+/**
+ * The store's main checkout is what ~/.agents points at, so whatever branch and
+ * working-tree state it is in is what every session reads. Edits belong in a
+ * worktree and reach this checkout only through a merged PR and a pull.
+ *
+ *   - not on the default branch  -> bad: every session reads an unmerged branch
+ *     (2026-09: 8 times, about 21 hours in total)
+ *   - commits not on origin      -> bad: someone committed to main directly
+ *   - uncommitted tracked change -> bad: an edit landed without a PR (often a
+ *     write through ~/.claude/skills; `link` copying hooks/pre-commit is the
+ *     benign case — compare with origin and `git checkout` it)
+ *   - behind origin              -> warn: merged work not pulled yet (no fetch here)
+ */
+function checkCheckout(store: string): void {
+  console.log("store checkout (what ~/.agents serves)");
+  const git = (...args: string[]) => {
+    const r = spawnSync("git", ["-C", store, ...args], { encoding: "utf8", timeout: 5000 });
+    return r.status === 0 ? (r.stdout ?? "").trim() : null;
+  };
+  if (git("rev-parse", "--is-inside-work-tree") !== "true") {
+    warn("not a git checkout — skipped");
+    console.log("");
+    return;
+  }
+  const head = git("symbolic-ref", "--short", "-q", "HEAD");
+  const remoteHead = git("symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD");
+  const def = remoteHead ? remoteHead.replace(/^origin\//, "") : "main";
+  if (head !== def) {
+    bad(`on ${head ?? "a detached HEAD"}, not ${def} — every session reads this. Switch back and edit in a worktree`);
+  } else {
+    ok(`on ${def}`);
+  }
+  const dirty = git("diff", "--name-only", "HEAD");
+  if (dirty) {
+    const files = dirty.split("\n");
+    bad(
+      `${files.length} uncommitted change(s) in the served checkout: ${files.slice(0, 5).join(", ")}` +
+        (files.length > 5 ? " …" : "") +
+        " — edits must go through a worktree and a PR",
+    );
+  } else {
+    ok("no uncommitted changes");
+  }
+  if (head === def && git("rev-parse", "-q", "--verify", `origin/${def}`)) {
+    const ahead = Number(git("rev-list", "--count", `origin/${def}..HEAD`) ?? "0");
+    const behind = Number(git("rev-list", "--count", `HEAD..origin/${def}`) ?? "0");
+    if (ahead > 0) bad(`${ahead} commit(s) on ${def} that origin does not have — committed to ${def} directly?`);
+    if (behind > 0) warn(`${behind} commit(s) behind origin/${def} (as of the last fetch) — git pull --ff-only`);
+    if (ahead === 0 && behind === 0) ok(`matches origin/${def} (as of the last fetch)`);
+  }
+  console.log("");
 }
 
 /**
@@ -862,6 +916,7 @@ function main(): void {
   checkLinks();
   checkStoreLinks(layout);
   checkHooks(store);
+  checkCheckout(store);
   const tracked = checkLock();
   const catalog = checkCatalog();
   checkSkills(tracked, catalog);
