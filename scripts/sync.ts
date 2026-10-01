@@ -23,6 +23,7 @@ import {
   readCatalog,
   readLock,
   storeCatalog,
+  storeLock,
   storeSkills,
   targetAgents,
   thirdPartyNames,
@@ -31,6 +32,14 @@ import {
 import { distributableNames, printFanOut, reconcileFanOut } from "./lib/fanout.ts";
 
 const gitignorePath = (): string => path.join(storeSkills(), ".gitignore");
+
+/**
+ * The lockfile as seen from the .gitignore, for its header comment. Computed
+ * rather than written as `../skills.lock`: a store that declares its skills
+ * deeper (agent-skills.json) would otherwise be told to look in the wrong place.
+ */
+const lockFromGitignore = (): string =>
+  path.relative(storeSkills(), storeLock()).split(path.sep).join("/");
 const BEGIN = "# --- managed by scripts/sync.ts (do not edit) ---";
 const END = "# --- end managed ---";
 
@@ -43,7 +52,7 @@ function writeGitignore(names: string[]): void {
   const GITIGNORE = gitignorePath();
   const block = [
     BEGIN,
-    "# 3rd-party skills: tracked in ../skills.lock, restored by `agent-skills sync`.",
+    `# 3rd-party skills: tracked in ${lockFromGitignore()}, restored by \`agent-skills sync\`.`,
     ...names.map((n) => `/${n}/`),
     END,
   ].join("\n");

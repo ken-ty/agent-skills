@@ -16,6 +16,7 @@ import path from "node:path";
 import { AGENTS_MD, AGENTS_SKILLS, inspectLink, storeSkills, tilde } from "./paths.ts";
 import { type AgentDef, distributionTargets, linkTarget } from "./agents.ts";
 import { symlinkSync } from "./symlink.ts";
+import type { StoreLink } from "./layout.ts";
 
 export type FanOutAction =
   | { kind: "linked"; agent: string; name: string; at: string }
@@ -296,4 +297,72 @@ export function printInstructions(actions: InstructionAction[], dryRun: boolean)
     }
   }
   return true;
+}
+
+export type StoreLinkAction =
+  | { kind: "ok" | "linked" | "kept" | "no-source"; link: StoreLink }
+  | { kind: "repointed"; link: StoreLink; was: string };
+
+/**
+ * Wire the store's declared `links` (agent-skills.json) into `$HOME`.
+ *
+ * Same clobber rule as the instruction files above: a symlink is ours to draw
+ * or repoint, since it holds no bytes; anything real at the target is someone's
+ * data and is reported, never moved. A declared source that does not exist is
+ * not linked at all — a dangling link would look wired and load nothing.
+ */
+export function reconcileStoreLinks(links: StoreLink[], dryRun: boolean): StoreLinkAction[] {
+  const out: StoreLinkAction[] = [];
+  for (const link of links) {
+    if (!fs.existsSync(link.from)) {
+      out.push({ kind: "no-source", link });
+      continue;
+    }
+    const state = inspectLink(link.to, link.from);
+    switch (state.kind) {
+      case "linked-correctly":
+        out.push({ kind: "ok", link });
+        break;
+      case "missing":
+        if (!dryRun) {
+          fs.mkdirSync(path.dirname(link.to), { recursive: true });
+          symlinkSync(link.from, link.to);
+        }
+        out.push({ kind: "linked", link });
+        break;
+      case "linked-elsewhere":
+        if (!dryRun) {
+          fs.unlinkSync(link.to);
+          symlinkSync(link.from, link.to);
+        }
+        out.push({ kind: "repointed", link, was: state.target });
+        break;
+      default:
+        out.push({ kind: "kept", link });
+        break;
+    }
+  }
+  return out;
+}
+
+/** Print the store-link report. False when a declared source is missing. */
+export function printStoreLinks(actions: StoreLinkAction[], dryRun: boolean): boolean {
+  if (actions.length === 0) return true;
+  const lead = dryRun ? "would " : "";
+  console.log(`store links (${actions.length} declared in agent-skills.json)`);
+  let ok = true;
+  for (const a of actions) {
+    const { fromRel, to } = a.link;
+    if (a.kind === "ok") console.log(`  ok        ${tilde(to)} -> ${fromRel}`);
+    else if (a.kind === "linked") console.log(`  ${lead}link      ${tilde(to)} -> ${fromRel}`);
+    else if (a.kind === "repointed") console.log(`  ${lead}repoint   ${tilde(to)} -> ${fromRel} (was ${tilde(a.was)})`);
+    else if (a.kind === "kept") {
+      console.log(`  keep      ${tilde(to)} already exists and is not a symlink — not touched`);
+      console.log(`    move it aside by hand, then re-run to link it to ${fromRel}`);
+    } else {
+      ok = false;
+      console.error(`  SKIPPED   ${tilde(to)}: ${fromRel} does not exist in the store`);
+    }
+  }
+  return ok;
 }

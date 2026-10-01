@@ -100,6 +100,36 @@ agent-skills doctor    # 配線を検査
 別の store を指す symlink があれば張り替える。config に store パスを記録し、store に pre-commit
 audit フックを設置する。
 
+### store のレイアウトを宣言する（任意）
+
+既定では、store の直下に `skills/`・`agents/AGENTS.md`・`catalog.json`・`skills.lock` がある前提で
+動く。配るものを別の場所に置きたい store は、直下に `agent-skills.json` を置いて場所を宣言する。
+
+```json
+{
+  "layout": {
+    "skills": "agents/skills",
+    "agentsMd": "agents/AGENTS.md",
+    "catalog": "catalog.json",
+    "lock": "skills.lock"
+  },
+  "links": [
+    { "from": "agents/rulebooks", "to": "~/.agents/rulebooks" }
+  ]
+}
+```
+
+- ファイルが無ければ全部既定。`layout` のキーも省略したものは既定値になる。
+- `layout` の値は store ルートからの相対パス。`..` で外に出るパスや絶対パスは受け付けない。
+  store の外を指すと、pre-commit の audit が見ていないファイルを `~/.agents` に配ることになるため。
+- `links` は store の中のディレクトリかファイルを `~/` 配下へ symlink で配る。`link` と `distribute`
+  が張り、`doctor` がリンク先と元の存在を検査する。張る場所に symlink でない実体が既にあれば、
+  上書きせず報告だけする。
+- 宣言が壊れている（JSON 不正、パスが store の外を指す）と、`doctor` は BAD を出し、他のコマンドは
+  理由を出して終了する。`doctor`（`--repo` を含む）は宣言した各パスが実在するかも見る。
+
+`init` は既定レイアウトで store を作り、宣言ファイルは書かない。
+
 ## コマンド
 
 | コマンド | 説明 |

@@ -25,6 +25,8 @@ import {
   tilde,
 } from "./lib/paths.ts";
 import { writeConfig } from "./lib/store.ts";
+import { type StoreLayout, readLayout } from "./lib/layout.ts";
+import { printStoreLinks, reconcileStoreLinks } from "./lib/fanout.ts";
 import { symlinkSync } from "./lib/symlink.ts";
 
 const argv = process.argv.slice(2);
@@ -180,22 +182,28 @@ function main(): void {
     return;
   }
 
+  // Read the declaration before writing anything: a store whose layout cannot
+  // be trusted must not end up recorded in config or wired into ~/.agents.
+  // Read from storeDir directly, for the same reason the link targets are.
+  const layout: StoreLayout = readLayout(storeDir);
+
   console.log(`store: ${tilde(storeDir)}`);
+  if (layout.declared) console.log(`layout: declared in ${tilde(path.join(storeDir, "agent-skills.json"))}`);
   act(`write ${tilde(path.join("~/.config/agent-skills", "config.json"))}`, () =>
     writeConfig({ store: storeDir }),
   );
   console.log("");
 
-  ensureDir(path.join(storeDir, "skills"));
+  ensureDir(layout.abs.skills);
   ensureDir(AGENTS_DIR);
-  seedAgentsMd(path.join(storeDir, "agents", "AGENTS.md"));
+  seedAgentsMd(layout.abs.agentsMd);
 
   // Targets come straight from storeDir, not from config: link is what writes
   // the config, so it cannot read the store path back out of it yet.
   const linkTargets = [
-    { label: "skills", from: AGENTS_SKILLS, to: path.join(storeDir, "skills") },
-    { label: "lock", from: AGENTS_LOCK, to: path.join(storeDir, "skills.lock") },
-    { label: "agents.md", from: AGENTS_MD, to: path.join(storeDir, "agents", "AGENTS.md") },
+    { label: "skills", from: AGENTS_SKILLS, to: layout.abs.skills },
+    { label: "lock", from: AGENTS_LOCK, to: layout.abs.lock },
+    { label: "agents.md", from: AGENTS_MD, to: layout.abs.agentsMd },
   ];
   for (const { label, from, to } of linkTargets) {
     console.log(`${label}: ${tilde(from)} -> ${tilde(to)}`);
@@ -221,6 +229,13 @@ function main(): void {
     }
     console.log("");
   }
+
+  // Declared extras (agent-skills.json `links`). Unlike the three above, a real
+  // file in the way is never migrated: it was not this tool's to begin with.
+  if (!printStoreLinks(reconcileStoreLinks(layout.links, dryRun), dryRun)) {
+    fail("a declared link source is missing from the store — see above");
+  }
+  if (layout.links.length > 0) console.log("");
 
   console.log(`hooks: ${tilde(storeDir)}/${HOOKS_DIR_NAME}/pre-commit`);
   installHook();
