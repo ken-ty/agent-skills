@@ -182,6 +182,18 @@ function main(): void {
     return;
   }
 
+  // With no path given, the store is whatever repo the shell happens to be in.
+  // Rewiring ~/.agents to an arbitrary repo cuts every session off from its
+  // skills, so require something that only a store has. (2026-10-02: a bare
+  // `link` run from a planning folder pointed ~/.agents at it.)
+  const markers = ["agent-skills.json", "catalog.json", "skills.lock", "skills"];
+  if (positional[0] === undefined && !markers.some((m) => fs.existsSync(path.join(storeDir, m)))) {
+    console.error(`ERROR: ${tilde(storeDir)} does not look like a store (none of ${markers.join(", ")}).`);
+    console.error("  Pass the store explicitly: `agent-skills link <dir>`. A new store starts with `agent-skills init`.");
+    process.exitCode = 1;
+    return;
+  }
+
   // Read the declaration before writing anything: a store whose layout cannot
   // be trusted must not end up recorded in config or wired into ~/.agents.
   // Read from storeDir directly, for the same reason the link targets are.
