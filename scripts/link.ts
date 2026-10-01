@@ -24,7 +24,7 @@ import {
   inspectLink,
   tilde,
 } from "./lib/paths.ts";
-import { writeConfig } from "./lib/store.ts";
+import { readConfig, writeConfig } from "./lib/store.ts";
 import { type StoreLayout, readLayout } from "./lib/layout.ts";
 import { printStoreLinks, reconcileStoreLinks } from "./lib/fanout.ts";
 import { symlinkSync } from "./lib/symlink.ts";
@@ -190,7 +190,10 @@ function main(): void {
   console.log(`store: ${tilde(storeDir)}`);
   if (layout.declared) console.log(`layout: declared in ${tilde(path.join(storeDir, "agent-skills.json"))}`);
   act(`write ${tilde(path.join("~/.config/agent-skills", "config.json"))}`, () =>
-    writeConfig({ store: storeDir }),
+    // Keep the rest of the config (agents, shareRepo): link only owns `store`.
+    // Writing `{ store }` alone silently disabled every agent enabled with
+    // `agents enable`, e.g. codex.
+    writeConfig({ ...(readConfig() ?? {}), store: storeDir }),
   );
   console.log("");
 
