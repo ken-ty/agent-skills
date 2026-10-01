@@ -13,10 +13,12 @@ import {
   distributableNames,
   printFanOut,
   printInstructions,
+  printStoreLinks,
   reconcileFanOut,
   reconcileInstructions,
+  reconcileStoreLinks,
 } from "./lib/fanout.ts";
-import { storeSkills, tilde } from "./lib/paths.ts";
+import { storeLayout, storeSkills, tilde } from "./lib/paths.ts";
 
 const dryRun = process.argv.includes("--dry-run") || process.argv.includes("-n");
 
@@ -37,7 +39,10 @@ function main(): void {
   // enabled set, different clobber rule — see reconcileInstructions.
   printInstructions(reconcileInstructions(dryRun), dryRun);
 
-  if (!ok) process.exitCode = 1;
+  // Whatever else the store declares for $HOME (agent-skills.json `links`).
+  const linksOk = printStoreLinks(reconcileStoreLinks(storeLayout().links, dryRun), dryRun);
+
+  if (!ok || !linksOk) process.exitCode = 1;
 }
 
 main();

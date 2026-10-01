@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolveStore } from "./store.ts";
+import { type StoreLayout, layoutOf } from "./layout.ts";
 
 /**
  * This CLI's own root, resolved from this file's location (scripts/lib/ -> ../..).
@@ -21,14 +22,23 @@ export function storeRoot(): string {
   return resolveStore();
 }
 
+/**
+ * The configured store's layout: its `agent-skills.json`, or the defaults when
+ * it has none. Throws (actionable) when the declaration is malformed — every
+ * path below goes through here, so no command runs on a layout it cannot trust.
+ */
+export function storeLayout(): StoreLayout {
+  return layoutOf(storeRoot());
+}
+
 /** Canonical store inside the store repo. `~/.agents/skills` is symlinked here. */
 export function storeSkills(): string {
-  return path.join(storeRoot(), "skills");
+  return storeLayout().abs.skills;
 }
 
 /** Canonical lockfile inside the store repo. `~/.agents/.skill-lock.json` -> here. */
 export function storeLock(): string {
-  return path.join(storeRoot(), "skills.lock");
+  return storeLayout().abs.lock;
 }
 
 /**
@@ -40,7 +50,7 @@ export function storeLock(): string {
  * this is the file a leaked secret would reach the furthest from.
  */
 export function storeAgentsMd(): string {
-  return path.join(storeRoot(), "agents", "AGENTS.md");
+  return storeLayout().abs.agentsMd;
 }
 
 /**
@@ -52,7 +62,7 @@ export function storeAgentsMd(): string {
  * restore is not.
  */
 export function storeCatalog(): string {
-  return path.join(storeRoot(), "catalog.json");
+  return storeLayout().abs.catalog;
 }
 
 /**

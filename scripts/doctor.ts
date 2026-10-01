@@ -45,6 +45,7 @@ import {
 import { CONFIG_PATH, STORE_ENV, overrideStore, resolveStoreOrNull } from "./lib/store.ts";
 import { type AgentSetting, agentSettings } from "./lib/agents.ts";
 import { IMPORT_LINE, importsStore } from "./lib/fanout.ts";
+import { DECLARATION_FILE, LAYOUT_KEYS, type LayoutKey, type StoreLayout, layoutOf } from "./lib/layout.ts";
 
 const repoMode = process.argv.includes("--repo");
 
@@ -169,6 +170,89 @@ function checkHooks(store: string): void {
         if (executable) {
           ok(`pre-commit audit active (core.hooksPath=${HOOKS_DIR_NAME}/), matches the tool's template`);
         }
+        break;
+    }
+  }
+  console.log("");
+}
+
+/**
+ * The store's own declaration of where things live (agent-skills.json).
+ *
+ * Runs before anything that resolves a store path, because every one of those
+ * goes through it: a malformed declaration is reported here and the rest is
+ * skipped, rather than surfacing as the first unrelated check to throw.
+ *
+ * A path the file sets explicitly and that is missing is a mistake in the
+ * declaration (typically a move that was declared but not made). A defaulted
+ * path that is missing is the long-standing case the later checks already
+ * grade — an old store without AGENTS.md, a fresh one without skills.lock — so
+ * it is only noted here, never counted twice.
+ *
+ * Returns the layout, or null when it cannot be trusted.
+ */
+const LAYOUT_REQUIRED: ReadonlySet<LayoutKey> = new Set<LayoutKey>(["skills", "agentsMd"]);
+
+function checkLayout(root: string): StoreLayout | null {
+  console.log(`layout (${DECLARATION_FILE})`);
+  let layout: StoreLayout;
+  try {
+    layout = layoutOf(root);
+  } catch (e) {
+    bad((e as Error).message);
+    console.log("");
+    return null;
+  }
+
+  if (!layout.declared) ok(`no ${DECLARATION_FILE} — default layout`);
+  for (const key of LAYOUT_KEYS) {
+    const rel = layout.rel[key];
+    const explicit = layout.explicit.has(key);
+    const label = `${key}: ${rel}${explicit ? "" : " (default)"}`;
+    if (fs.existsSync(layout.abs[key])) {
+      if (layout.declared) ok(label);
+    } else if (!explicit) {
+      if (layout.declared) warn(`${label} does not exist`);
+    } else if (LAYOUT_REQUIRED.has(key)) {
+      bad(`${label} is declared but does not exist`);
+    } else {
+      // A lockfile or catalog can legitimately not exist yet; checkLock /
+      // checkCatalog say so in their own words.
+      warn(`${label} is declared but does not exist yet`);
+    }
+  }
+
+  // The source half of each declared link is a property of the repo, so it is
+  // checked in --repo too; the $HOME half is checkStoreLinks, full run only.
+  for (const link of layout.links) {
+    if (!fs.existsSync(link.from)) {
+      bad(`links: ${link.fromRel} is declared as a link source but does not exist in the store`);
+    }
+  }
+  console.log("");
+  return layout;
+}
+
+/** Declared `links`, as wired into $HOME. Written by `link` / `distribute`. */
+function checkStoreLinks(layout: StoreLayout): void {
+  if (layout.links.length === 0) return;
+  console.log(`store links (declared in ${DECLARATION_FILE}, written by \`agent-skills distribute\`)`);
+  for (const link of layout.links) {
+    const state = inspectLink(link.to, link.from);
+    const what = `${tilde(link.to)} -> ${link.fromRel}`;
+    switch (state.kind) {
+      case "linked-correctly":
+        ok(what);
+        break;
+      case "missing":
+        bad(`${tilde(link.to)} does not exist — run \`agent-skills distribute\``);
+        break;
+      case "linked-elsewhere":
+        bad(`${tilde(link.to)} -> ${tilde(state.target)} (not ${link.fromRel} in this store) — run \`agent-skills distribute\``);
+        break;
+      default:
+        // Same rule as an agent's instruction file: real data is not ours to move.
+        warn(`${tilde(link.to)} is a real ${state.kind === "real-dir" ? "directory" : "file"} — not linked; move it aside by hand, then \`agent-skills distribute\``);
         break;
     }
   }
@@ -505,8 +589,10 @@ function checkListingBudget(): void {
 function checkRemoteTracking(tracked: string[]): void {
   console.log("remote bodies (must stay out of git)");
   const root = storeRoot();
+  // Store-relative, posix: what git prints and what a pathspec takes.
+  const skillsRel = layoutOf(root).rel.skills;
 
-  const paths = tracked.map((name) => path.posix.join("skills", name));
+  const paths = tracked.map((name) => path.posix.join(skillsRel, name));
   const files = gitTrackedUnder(root, paths);
 
   if (files === null) {
@@ -521,14 +607,14 @@ function checkRemoteTracking(tracked: string[]): void {
     // Group by skill so the fix is one command per skill, not one per file.
     const bySkill = new Map<string, number>();
     for (const f of files) {
-      // Every hit is `skills/<name>/…` — the pathspecs were built that way.
-      const name = f.split("/")[1] ?? f;
+      // Every hit is `<skills>/<name>/…` — the pathspecs were built that way.
+      const name = f.slice(skillsRel.length + 1).split("/")[0] ?? f;
       bySkill.set(name, (bySkill.get(name) ?? 0) + 1);
     }
     for (const [name, count] of bySkill) {
       bad(
         `${name}: ${count} file(s) tracked by git — a remote body must be gitignored. ` +
-          `\`git rm -r --cached skills/${name}\`, then \`agent-skills sync\``,
+          `\`git rm -r --cached ${skillsRel}/${name}\`, then \`agent-skills sync\``,
       );
     }
   }
@@ -742,6 +828,11 @@ function repoMain(): void {
   overrideStore(top);
   console.log(`doctor --repo: ${tilde(top)}\n`);
 
+  if (checkLayout(top) === null) {
+    summarise();
+    return;
+  }
+
   const tracked = checkLock();
   const catalog = checkCatalog();
   checkSkills(tracked, catalog);
@@ -763,7 +854,13 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  const layout = checkLayout(store);
+  if (layout === null) {
+    summarise();
+    return;
+  }
   checkLinks();
+  checkStoreLinks(layout);
   checkHooks(store);
   const tracked = checkLock();
   const catalog = checkCatalog();

@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { CLI_ROOT, tilde } from "./lib/paths.ts";
+import { DEFAULT_LAYOUT } from "./lib/layout.ts";
 
 const argv = process.argv.slice(2);
 const positional = argv.filter((a) => !a.startsWith("-"));
@@ -51,9 +52,12 @@ function writeIfAbsent(file: string, contents: string): void {
 function main(): void {
   console.log(`init: ${tilde(dir)}\n`);
 
-  fs.mkdirSync(path.join(dir, "skills"), { recursive: true });
-  writeIfAbsent(path.join(dir, "skills", ".gitignore"), GITIGNORE_BLOCK);
-  writeIfAbsent(path.join(dir, "catalog.json"), CATALOG);
+  // A new store gets the default layout and no agent-skills.json: the file is
+  // for stores that want to differ, and an absent one means exactly this.
+  const at = (rel: string): string => path.join(dir, ...rel.split("/"));
+  fs.mkdirSync(at(DEFAULT_LAYOUT.skills), { recursive: true });
+  writeIfAbsent(path.join(at(DEFAULT_LAYOUT.skills), ".gitignore"), GITIGNORE_BLOCK);
+  writeIfAbsent(at(DEFAULT_LAYOUT.catalog), CATALOG);
   writeIfAbsent(path.join(dir, "README.md"), README);
   writeIfAbsent(path.join(dir, ".gitignore"), "node_modules/\n.DS_Store\n");
 
