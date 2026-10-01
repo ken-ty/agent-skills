@@ -52,11 +52,18 @@ const all = process.argv.includes("--all");
  * string does not resolve as a pathspec, so `git show :<file>` fails and the
  * file drops out of the scan. A skill named in Japanese would then carry a
  * secret straight past the hook. NUL-separated output is never rewritten.
+ *
+ * `--no-renames` is the same kind of detail. Rename detection is on by default
+ * (`diff.renames`), so `git mv a b` plus an edit to b is reported as R, which
+ * `--diff-filter=ACM` drops: the hook printed "nothing staged" and passed a
+ * renamed file with a token appended. With renames off, b is a plain A and is
+ * scanned whatever `diff.renames` the user has set. Adding R to the filter
+ * would also work, but would still lean on the user's rename config.
  */
 function targets(): string[] {
   const r = all
     ? git(["ls-files", "-z"])
-    : git(["diff", "--cached", "--name-only", "--diff-filter=ACM", "-z"]);
+    : git(["diff", "--cached", "--no-renames", "--name-only", "--diff-filter=ACM", "-z"]);
   return r.out.split("\0").filter((l) => l !== "");
 }
 
