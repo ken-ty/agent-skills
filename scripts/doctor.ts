@@ -47,6 +47,12 @@ import { CONFIG_PATH, STORE_ENV, overrideStore, resolveStoreOrNull } from "./lib
 import { type AgentSetting, agentSettings } from "./lib/agents.ts";
 import { IMPORT_LINE, importsStore } from "./lib/fanout.ts";
 import { DECLARATION_FILE, LAYOUT_KEYS, type LayoutKey, type StoreLayout, layoutOf } from "./lib/layout.ts";
+import {
+  CLAUDE_SETTINGS,
+  declaredHookScripts,
+  diffSettings,
+  readSettings,
+} from "./lib/claude-settings.ts";
 
 const repoMode = process.argv.includes("--repo");
 
@@ -287,8 +293,84 @@ function checkLayout(root: string): StoreLayout | null {
     if (fs.existsSync(layout.project.abs)) ok(`project: ${layout.project.rel}`);
     else bad(`project: ${layout.project.rel} is declared but does not exist`);
   }
+  if (layout.claudeSettings !== null) {
+    const label = `claudeSettings: ${layout.claudeSettings.rel}`;
+    try {
+      if (readSettings(layout.claudeSettings.abs) === null) bad(`${label} is declared but does not exist`);
+      else ok(label);
+    } catch (e) {
+      bad((e as Error).message);
+    }
+  }
   console.log("");
   return layout;
+}
+
+/**
+ * The store's declared Claude Code settings against `~/.claude/settings.json`.
+ *
+ * A difference is a warn, never BAD: it is the normal state between a merged
+ * declaration and the person running `agent-skills settings apply`, and the
+ * other direction — "always allow" adding to the machine's copy — is Claude
+ * Code working as designed. Both are worth seeing; neither is broken.
+ *
+ * What is BAD is a declared hook whose script is not on this machine: once
+ * applied, that hook fails on every event it is registered for.
+ */
+function checkClaudeSettings(layout: StoreLayout): void {
+  if (layout.claudeSettings === null) return;
+  console.log(`claude settings (${layout.claudeSettings.rel} -> ${tilde(CLAUDE_SETTINGS)}, applied by \`agent-skills settings apply\`)`);
+  let declared: ReturnType<typeof readSettings>;
+  let machine: ReturnType<typeof readSettings>;
+  try {
+    declared = readSettings(layout.claudeSettings.abs);
+    machine = readSettings(CLAUDE_SETTINGS);
+  } catch (e) {
+    bad((e as Error).message);
+    console.log("");
+    return;
+  }
+  if (declared === null) {
+    // Already BAD in checkLayout.
+    console.log("");
+    return;
+  }
+
+  if (machine === null) {
+    warn(`${tilde(CLAUDE_SETTINGS)} does not exist — the declaration has not been applied on this machine`);
+  } else {
+    const entries = diffSettings(declared.json, machine.json);
+    const groups = new Map<string, { add: number; remove: number; change: number }>();
+    for (const e of entries) {
+      const key = e.key.startsWith("permissions.") || e.key === "hooks" ? e.key : "other";
+      const g = groups.get(key) ?? { add: 0, remove: 0, change: 0 };
+      g[e.op]++;
+      groups.set(key, g);
+    }
+    if (groups.size === 0) ok("declaration and machine agree");
+    for (const [key, g] of groups) {
+      const parts = [
+        g.add > 0 ? `${g.add} declared only (apply adds)` : "",
+        g.remove > 0 ? `${g.remove} machine only (apply removes${key.startsWith("permissions.") ? "; import keeps" : ""})` : "",
+        g.change > 0 ? `${g.change} changed` : "",
+      ].filter((p) => p !== "");
+      const what = key === "other" ? [...new Set(entries.filter((e) => !e.key.startsWith("permissions.") && e.key !== "hooks").map((e) => e.key))].join(", ") : key;
+      warn(`${what}: ${parts.join(", ")} — \`agent-skills settings diff\``);
+    }
+  }
+
+  for (const { file } of declaredHookScripts(declared.json)) {
+    if (!fs.existsSync(file)) {
+      bad(`hook ${tilde(file)} is declared but does not exist — \`agent-skills distribute\` places the store's hooks`);
+      continue;
+    }
+    try {
+      fs.accessSync(file, fs.constants.X_OK);
+    } catch {
+      warn(`hook ${tilde(file)} is not executable — Claude Code runs the command as written`);
+    }
+  }
+  console.log("");
 }
 
 /** Declared `links`, as wired into $HOME. Written by `link` / `distribute`. */
@@ -919,6 +1001,8 @@ function main(): void {
   }
   checkLinks();
   checkStoreLinks(layout);
+  // $HOME again (~/.claude/settings.json), so full run only, like the links.
+  checkClaudeSettings(layout);
   checkHooks(store);
   checkCheckout(store);
   const tracked = checkLock();
