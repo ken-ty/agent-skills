@@ -7,7 +7,8 @@
  *     "layout": { "skills": "agents/skills", "agentsMd": "agents/AGENTS.md",
  *                 "catalog": "catalog.json", "lock": "skills.lock" },
  *     "links":  [ { "from": "agents/rulebooks", "to": "~/.agents/rulebooks" } ],
- *     "project": "agents/project"
+ *     "project": "agents/project",
+ *     "claudeSettings": "agents/claude/settings.json"
  *   }
  *
  * `project` names the directory of per-level templates that `project init`
@@ -25,6 +26,12 @@
  * declaration that escapes the store would make `link` wire `~/.agents` at
  * something the store's audit hook never sees, which defeats the reason the
  * store holds these files at all.
+ *
+ * `claudeSettings` names the store's declaration of Claude Code's global
+ * `~/.claude/settings.json`, read by `agent-skills settings`. Same shape as
+ * `project`: no default, top level, null when the store declares none. It is
+ * a file the store owns but never links — Claude Code rewrites its settings
+ * itself, so the declaration is copied by hand (`settings apply`), not wired.
  *
  * This module must not import ./paths.ts: paths.ts depends on it.
  */
@@ -71,6 +78,8 @@ export type StoreLayout = {
   links: StoreLink[];
   /** Declared `project` templates dir, or null when the store has none. */
   project: { rel: string; abs: string } | null;
+  /** Declared `claudeSettings` file, or null when the store has none. */
+  claudeSettings: { rel: string; abs: string } | null;
 };
 
 /** Thrown for a malformed declaration. `actionable` makes run.js print it without a stack. */
@@ -135,6 +144,7 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
   const explicit = new Set<LayoutKey>();
   const links: StoreLink[] = [];
   let project: StoreLayout["project"] = null;
+  let claudeSettings: StoreLayout["claudeSettings"] = null;
 
   if (text !== null) {
     const fail = (why: string): never => {
@@ -153,7 +163,8 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
       layout,
       links: rawLinks,
       project: rawProject,
-    } = decl as { layout?: unknown; links?: unknown; project?: unknown };
+      claudeSettings: rawClaudeSettings,
+    } = decl as { layout?: unknown; links?: unknown; project?: unknown; claudeSettings?: unknown };
 
     try {
       if (layout !== undefined) {
@@ -188,6 +199,12 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
         const rel = storeRelative(rawProject, '"project"');
         project = { rel, abs: path.join(root, ...rel.split("/")) };
       }
+
+      if (rawClaudeSettings !== undefined) {
+        const rel = storeRelative(rawClaudeSettings, '"claudeSettings"');
+        if (!rel.endsWith(".json")) fail(`"claudeSettings" is "${rel}" — it must name a .json file`);
+        claudeSettings = { rel, abs: path.join(root, ...rel.split("/")) };
+      }
     } catch (e) {
       if (e instanceof LayoutError && !e.message.startsWith(file)) {
         throw new LayoutError(`${file}: ${e.message}`);
@@ -200,7 +217,7 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
     LAYOUT_KEYS.map((k) => [k, path.join(root, ...rel[k].split("/"))]),
   ) as Record<LayoutKey, string>;
 
-  return { root, declared: text !== null, rel, explicit, abs, links, project };
+  return { root, declared: text !== null, rel, explicit, abs, links, project, claudeSettings };
 }
 
 const cache = new Map<string, StoreLayout>();

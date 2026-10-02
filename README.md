@@ -116,7 +116,8 @@ audit フックを設置する。
   "links": [
     { "from": "agents/rulebooks", "to": "~/.agents/rulebooks" }
   ],
-  "project": "agents/project"
+  "project": "agents/project",
+  "claudeSettings": "agents/claude/settings.json"
 }
 ```
 
@@ -128,6 +129,8 @@ audit フックを設置する。
   上書きせず報告だけする。
 - `project` は `project init` が読む雛形のディレクトリ（[プロジェクトに既定を置く](#プロジェクトに既定を置く)）。
   既定値は無く、書かなければ雛形が無い store として扱う。
+- `claudeSettings` は Claude Code の `~/.claude/settings.json` の宣言（[Claude Code の設定を宣言する](#claude-code-の設定を宣言する)）。
+  既定値は無い。`.json` のファイルを指す。
 - 宣言が壊れている（JSON 不正、パスが store の外を指す）と、`doctor` は BAD を出し、他のコマンドは
   理由を出して終了する。`doctor`（`--repo` を含む）は宣言した各パスが実在するかも見る。
 
@@ -143,10 +146,13 @@ audit フックを設置する。
 | `agent-skills sync` | `kind: remote` で実体が無いものを取得し、`skills/.gitignore` を再生成し、有効なエージェントへ symlink を配る |
 | `agent-skills agents` | どのエージェントへ配るかの一覧と現在の状態 (read-only)。`enable <name>` / `disable <name>` で切り替え |
 | `agent-skills distribute` | 有効なエージェントのディレクトリを store に合わせる (`--dry-run` 可) |
-| `agent-skills doctor` | store・**store のチェックアウトの状態（main か・未コミットの変更・origin との差）**・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突・**frontmatter のクラウド配布適合**・**スキル一覧の予算超過**を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
+| `agent-skills doctor` | store・**store のチェックアウトの状態（main か・未コミットの変更・origin との差）**・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突・**frontmatter のクラウド配布適合**・**スキル一覧の予算超過**・**宣言した Claude Code の設定と実機の差**を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
 | `agent-skills project init --level <level> [dir]` | store の雛形（`project`）から、git リポジトリにレベル別の既定を置く。既存は上書きしない (冪等、`--dry-run` 可) |
+| `agent-skills settings diff [store]` | store が宣言した Claude Code の設定と `~/.claude/settings.json` の差を表示 (read-only。終了コード 0=一致 1=差あり 2=エラー) |
+| `agent-skills settings import (<store> \| --to <file>)` | 実機にあって宣言に無い `permissions.allow` / `ask` / `deny` を宣言に足す (`--dry-run` 可) |
+| `agent-skills settings apply [store]` | 宣言を `~/.claude/settings.json` へコピーする。元は `.bak-<日時>` に退避。**人が叩く** (`--yes` で確認を省く) |
 | `agent-skills share <name>` | スキルを 1 本だけ**外部の人に渡す**。既定は期限つきの一時共有、`--keep` で恒久共有 (`--dry-run` 可) |
 
 store 固有の検査（生成物の鮮度、frontmatter のスキーマなど）は store の `hooks/pre-commit.d/` に実行可能ファイルで置く。pre-commit は audit のあとに名前順で実行し、非 0 ならコミットを止める。`hooks/pre-commit` 自体は `link` が上書きするので、そこには書かない。
@@ -184,6 +190,36 @@ agents/project/<level>/
 - **`--level` は省略できない。** どのレベルか（自分だけのリポジトリか、他人も見るか、先方の
   リポジトリか）はこのコマンドが持たない情報で決まるので、推定しない
 - 対象は git リポジトリに限る。まだなら先に `git init` する
+
+## Claude Code の設定を宣言する
+
+権限と hook の登録（`~/.claude/settings.json`）を store に宣言として持ち、レビューを通したものを人が反映する。
+
+```bash
+agent-skills settings diff                       # 宣言と実機の差（読むだけ）
+agent-skills settings import <store の worktree>  # 実機で増えた allow 等を宣言に足す → PR
+! agent-skills settings apply                    # Claude Code の中から、人が叩く
+```
+
+- **apply は人が叩く。** セッションは自分の権限を変えられないし、変えられるべきでもない。エージェントが
+  してよいのは宣言の PR まで。Claude Code の中から叩くときは、入力欄で `!` を頭に付けて自分で実行する。
+  エージェントが叩けないことは、このコマンドではなく宣言の `permissions.deny` に
+  `Bash(agent-skills settings apply*)` を入れて保証する（コマンド側の仕掛けは迂回できるが、deny は
+  Claude Code が評価する）
+- **symlink ではなくコピーで配る。** Claude Code は「常に許可」や `/config` で `settings.json` を自分で
+  書き換える。symlink だと、その書き込みが store の作業ツリーに誰も意図しない変更として落ちる
+- **apply は上書きの前に差を出し、確認を求める。** 端末でなければ止まる（`--yes` で省く）。元のファイルは
+  `settings.json.bak-<日時>` に残す。宣言と実機がバイト単位で同じなら何もしない
+- **apply は `~` も `$HOME` も展開しない。** Claude Code が解釈するので、そのままコピーする。store には
+  `~/` の形でしか書けない（audit がホームの絶対パスを止める）
+- **差は意味で比べる。** キーの順序と `permissions` の配列の順序は無視し、ホームの書き方
+  （`/Users/<名前>/`、権限ルールの `//Users/<名前>/`、`$HOME/`、`~/`）は同じとみなす。`import` は
+  `~/` の形に直して足す
+- **import は足すだけ。** 宣言にあって実機に無い項目は消さずに報告する。hooks や model などの差も報告だけ
+  （直すかどうかは PR を読む人が決める）。`.primary-write-guard` のあるリポジトリのメインチェックアウトには
+  書かない。worktree を切ってから叩く
+- `doctor` は「claude settings」の節で、宣言と実機の差を warn で出す（apply 待ち、または「常に許可」で
+  増えた分）。宣言の hook が呼ぶ `~/.claude/hooks/` のスクリプトが無ければ BAD にする
 
 ## どのエージェントへ配るか
 

@@ -27,6 +27,7 @@ const SCRIPTS = [
   "agents",
   "distribute",
   "project",
+  "settings",
 ];
 
 /** Compare dotted versions numerically. parseInt drops tags like "-nightly". */
