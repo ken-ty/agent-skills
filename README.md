@@ -115,7 +115,8 @@ audit フックを設置する。
   },
   "links": [
     { "from": "agents/rulebooks", "to": "~/.agents/rulebooks" }
-  ]
+  ],
+  "project": "agents/project"
 }
 ```
 
@@ -125,6 +126,8 @@ audit フックを設置する。
 - `links` は store の中のディレクトリかファイルを `~/` 配下へ symlink で配る。`link` と `distribute`
   が張り、`doctor` がリンク先と元の存在を検査する。張る場所に symlink でない実体が既にあれば、
   上書きせず報告だけする。
+- `project` は `project init` が読む雛形のディレクトリ（[プロジェクトに既定を置く](#プロジェクトに既定を置く)）。
+  既定値は無く、書かなければ雛形が無い store として扱う。
 - 宣言が壊れている（JSON 不正、パスが store の外を指す）と、`doctor` は BAD を出し、他のコマンドは
   理由を出して終了する。`doctor`（`--repo` を含む）は宣言した各パスが実在するかも見る。
 
@@ -143,11 +146,44 @@ audit フックを設置する。
 | `agent-skills doctor` | store・**store のチェックアウトの状態（main か・未コミットの変更・origin との差）**・symlink・hook・`skills.lock`・`catalog.json`・remote 実体の git 追跡・各エージェントの配線・実行したツリーの `.claude/skills` との同名衝突・**frontmatter のクラウド配布適合**・**スキル一覧の予算超過**を検査 (read-only)。`--repo` で「実行した git リポジトリの中身」だけに絞る (pre-commit hook 用) |
 | `agent-skills audit` | 実行した git リポジトリの staged 内容に秘密・マシン固有情報が無いか検査 (`--all` で全追跡ファイル、gitleaks があれば併用) |
 | `agent-skills push` | store のスキルを **API ワークスペース**へアップロード (`--dry-run` 可、`--include-remote` で remote も) |
+| `agent-skills project init --level <level> [dir]` | store の雛形（`project`）から、git リポジトリにレベル別の既定を置く。既存は上書きしない (冪等、`--dry-run` 可) |
 | `agent-skills share <name>` | スキルを 1 本だけ**外部の人に渡す**。既定は期限つきの一時共有、`--keep` で恒久共有 (`--dry-run` 可) |
 
 store 固有の検査（生成物の鮮度、frontmatter のスキーマなど）は store の `hooks/pre-commit.d/` に実行可能ファイルで置く。pre-commit は audit のあとに名前順で実行し、非 0 ならコミットを止める。`hooks/pre-commit` 自体は `link` が上書きするので、そこには書かない。
 
 `npm run <cmd>` でも同じものが動く（リポジトリ内でのみ）。`agent-skills`/`skill` はどこからでも。
+
+## プロジェクトに既定を置く
+
+新しいリポジトリを作るたびに権限・hook・`.gitignore` をゼロから書かないために、store に
+「自分のリポジトリは基本こう」という雛形を持たせ、`project init` で一括で置く。雛形の中身は
+store が持ち、この CLI は置く仕組みだけを持つ。
+
+```bash
+agent-skills project init --level solo            # cwd の git リポジトリへ
+agent-skills project init --level guest ../other  # 別のリポジトリへ
+agent-skills project init --level solo --dry-run  # 何をするかだけ表示
+```
+
+store の `agent-skills.json` に `"project": "agents/project"` を書き、その下にレベルごとの
+ディレクトリを置く。レベルの名前と数は store が決める。
+
+```
+agents/project/<level>/
+├── extends      別のレベルを土台にする（1 行でレベル名）。同じパスのファイルはこちらが勝つ
+├── files/       リポジトリ直下へそのまま置く（実行ビットも写す）
+├── ignore       .gitignore に足す行
+├── exclude      .git/info/exclude に足す行（追跡ファイルを汚したくないリポジトリ向け）
+└── git-config   key=value。git config --local に書く（例: core.hooksPath=hooks）
+```
+
+- **既存のものは上書きしない。** 同じ中身なら `keep`、違えば `differs` と出して手を付けない。
+  `.gitignore` と `info/exclude` は足りない行だけ追記し、git config は未設定のときだけ書く。
+  なので何度叩いても結果は同じ
+- 最後に、書いたファイル・行・config を読み戻して確かめる。食い違えば `check: FAILED` で終了コード 1
+- **`--level` は省略できない。** どのレベルか（自分だけのリポジトリか、他人も見るか、先方の
+  リポジトリか）はこのコマンドが持たない情報で決まるので、推定しない
+- 対象は git リポジトリに限る。まだなら先に `git init` する
 
 ## どのエージェントへ配るか
 

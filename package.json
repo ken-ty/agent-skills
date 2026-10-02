@@ -18,6 +18,7 @@
     "audit": "node scripts/run.js audit",
     "push": "node scripts/run.js push",
     "share": "node scripts/run.js share",
+    "project": "node scripts/run.js project",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

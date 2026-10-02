@@ -6,8 +6,14 @@
  *   {
  *     "layout": { "skills": "agents/skills", "agentsMd": "agents/AGENTS.md",
  *                 "catalog": "catalog.json", "lock": "skills.lock" },
- *     "links":  [ { "from": "agents/rulebooks", "to": "~/.agents/rulebooks" } ]
+ *     "links":  [ { "from": "agents/rulebooks", "to": "~/.agents/rulebooks" } ],
+ *     "project": "agents/project"
  *   }
+ *
+ * `project` names the directory of per-level templates that `project init`
+ * places into other repos. It has no default: a store without it simply has
+ * no project templates, so it lives beside `layout` rather than in it (every
+ * `layout` key has a default and is checked for existence on that basis).
  *
  * The file is optional and so is every key in it. A store without one keeps
  * the layout this tool has always assumed, so existing stores need no change.
@@ -63,6 +69,8 @@ export type StoreLayout = {
   /** Absolute paths. */
   abs: Record<LayoutKey, string>;
   links: StoreLink[];
+  /** Declared `project` templates dir, or null when the store has none. */
+  project: { rel: string; abs: string } | null;
 };
 
 /** Thrown for a malformed declaration. `actionable` makes run.js print it without a stack. */
@@ -126,6 +134,7 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
   const rel: Record<LayoutKey, string> = { ...DEFAULT_LAYOUT };
   const explicit = new Set<LayoutKey>();
   const links: StoreLink[] = [];
+  let project: StoreLayout["project"] = null;
 
   if (text !== null) {
     const fail = (why: string): never => {
@@ -140,7 +149,11 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
     if (typeof decl !== "object" || decl === null || Array.isArray(decl)) {
       fail("must be a JSON object");
     }
-    const { layout, links: rawLinks } = decl as { layout?: unknown; links?: unknown };
+    const {
+      layout,
+      links: rawLinks,
+      project: rawProject,
+    } = decl as { layout?: unknown; links?: unknown; project?: unknown };
 
     try {
       if (layout !== undefined) {
@@ -170,6 +183,11 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
           });
         });
       }
+
+      if (rawProject !== undefined) {
+        const rel = storeRelative(rawProject, '"project"');
+        project = { rel, abs: path.join(root, ...rel.split("/")) };
+      }
     } catch (e) {
       if (e instanceof LayoutError && !e.message.startsWith(file)) {
         throw new LayoutError(`${file}: ${e.message}`);
@@ -182,7 +200,7 @@ export function readLayout(root: string, home: string = homedir()): StoreLayout 
     LAYOUT_KEYS.map((k) => [k, path.join(root, ...rel[k].split("/"))]),
   ) as Record<LayoutKey, string>;
 
-  return { root, declared: text !== null, rel, explicit, abs, links };
+  return { root, declared: text !== null, rel, explicit, abs, links, project };
 }
 
 const cache = new Map<string, StoreLayout>();
