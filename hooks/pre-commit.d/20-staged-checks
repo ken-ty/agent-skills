@@ -1,0 +1,4 @@
+#!/bin/sh
+# 機械検査（agents/checks/staged.py）。hooks/pre-commit はこの CLI が store に配るテンプレートそのものなので、
+# このリポジトリ固有の検査は drop-in から呼ぶ。
+exec /usr/bin/python3 "${AGENT_CHECKS_DIR:-$HOME/.agents/checks}/staged.py"

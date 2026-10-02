@@ -1,0 +1,2 @@
+# 公開しうるリポジトリの印。置くと staged.py と commit-msg.py が禁止語を検査する。
+# 語の一覧はここではなく ~/.config/agent-skills/forbidden-words.txt（コミットしない）。

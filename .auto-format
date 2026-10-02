@@ -1,0 +1,2 @@
+# このリポジトリでは編集のたびに自動整形する（store の agents/hooks/post-edit-format.sh）。
+# 整形の設定は .editorconfig（shfmt）と ruff.toml（ruff format）。
