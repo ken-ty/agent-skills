@@ -1,0 +1,5 @@
+# コミットしないファイル（store の agents/checks/staged.py の forbid-tracked）。1 行 1 パターン
+.DS_Store
+*.local.json
+.env
+.env.*

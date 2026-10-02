@@ -1,0 +1,13 @@
+#!/bin/sh
+# コミットメッセージに禁止語が入っていないか（中身は store の agents/checks/commit-msg.py）。
+# 直下に .forbid-words があるリポジトリだけで働く。置いたのは `agent-skills project init`。
+# AGENT_CHECKS_DIR で検査の置き場を差し替えられる（テスト用）。
+checks="${AGENT_CHECKS_DIR:-$HOME/.agents/checks}"
+py=/usr/bin/python3
+[ -x "$py" ] || py=python3
+
+if [ ! -f "$checks/commit-msg.py" ]; then
+  echo "commit-msg: $checks/commit-msg.py が無い。store を配線して agent-skills distribute を流す" >&2
+  exit 1
+fi
+exec "$py" "$checks/commit-msg.py" "$1"

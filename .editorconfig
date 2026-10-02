@@ -1,0 +1,12 @@
+# shfmt はこのファイルを読む（store の agents/hooks/post-edit-format.sh が編集のたびに流す）
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+[*.{sh,bash}]
+indent_style = space
+indent_size = 2
+switch_case_indent = true

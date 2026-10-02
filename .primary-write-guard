@@ -1,0 +1,2 @@
+# このリポジトリのメインチェックアウトへの直接の書き込みを止める（store の agents/hooks/primary-write-guard.py）。
+# 編集は .worktrees/ の worktree で行う。

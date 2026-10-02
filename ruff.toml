@@ -1,0 +1,2 @@
+# ruff format の設定（store の agents/hooks/post-edit-format.sh が編集のたびに流す）
+line-length = 120
