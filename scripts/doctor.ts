@@ -283,6 +283,10 @@ function checkLayout(root: string): StoreLayout | null {
       bad(`links: ${link.fromRel} is declared as a link source but does not exist in the store`);
     }
   }
+  if (layout.project !== null) {
+    if (fs.existsSync(layout.project.abs)) ok(`project: ${layout.project.rel}`);
+    else bad(`project: ${layout.project.rel} is declared but does not exist`);
+  }
   console.log("");
   return layout;
 }
