@@ -27,6 +27,7 @@ import {
   SKILL_KINDS,
   type Catalog,
   frontmatter,
+  frontmatterProblems,
   gitHooksPath,
   gitToplevel,
   gitTrackedUnder,
@@ -536,6 +537,47 @@ function checkSkills(tracked: string[], catalog: Catalog | null): void {
 }
 
 /**
+ * Frontmatter that only lenient readers understand: YAML a strict parser
+ * rejects, and a `name` that is not the directory's.
+ *
+ * Claude Code reads both without complaint — it keys skills by directory and
+ * skims the YAML — which is why neither shows up in daily use. The spec
+ * requires both, and the stricter consumers (other agents in the fan-out,
+ * claude.ai upload, `skills-ref validate`) skip the skill or load it under
+ * another name. BAD for `own`, which we can fix in this tree; a warning for
+ * remote and vendored, whose fix belongs upstream.
+ *
+ * https://agentskills.io/specification
+ */
+function checkFrontmatter(catalog: Catalog | null): void {
+  console.log("frontmatter (YAML / name)");
+  const entries = catalog?.skills ?? {};
+  let flagged = 0;
+
+  for (const name of presentSkillNames()) {
+    if (!hasSkillMd(name)) continue;
+    let md: string;
+    try {
+      md = fs.readFileSync(path.join(storeSkills(), name, "SKILL.md"), "utf8");
+    } catch {
+      continue;
+    }
+    const kind = entries[name]?.kind ?? "own";
+    const report = kind === "own" ? bad : warn;
+    const problems = frontmatterProblems(md);
+    const declared = frontmatter(md).name;
+    if (declared === undefined || declared === "") problems.push("no `name`");
+    else if (declared !== name) problems.push(`name is "${declared}" but the directory is "${name}"`);
+    if (problems.length === 0) continue;
+    flagged++;
+    for (const p of problems) report(`${name} (${kind}): ${p}`);
+  }
+
+  if (flagged === 0) ok("every SKILL.md is valid YAML and names its own directory");
+  console.log("");
+}
+
+/**
  * The six frontmatter fields the Agent Skills spec allows.
  *
  * Claude Code accepts far more (`disable-model-invocation`, `argument-hint`,
@@ -977,6 +1019,7 @@ function repoMain(): void {
   const catalog = checkCatalog();
   checkSkills(tracked, catalog);
   // Reads skill bodies only, so it is a fair question to ask of a commit.
+  checkFrontmatter(catalog);
   checkSpecFields(catalog);
   checkRemoteTracking(tracked);
   summarise();
@@ -1008,6 +1051,7 @@ function main(): void {
   const tracked = checkLock();
   const catalog = checkCatalog();
   checkSkills(tracked, catalog);
+  checkFrontmatter(catalog);
   checkSpecFields(catalog);
   // Depends on ~/.claude/settings.json and on remote bodies being synced, so it
   // belongs with the rest of the $HOME wiring rather than in --repo.
