@@ -344,6 +344,128 @@ export function frontmatter(text: string): Record<string, string> {
   return out;
 }
 
+/**
+ * Why a single-line YAML scalar would not mean what it looks like, or null.
+ *
+ * Plain (unquoted) scalars are where hand-written frontmatter breaks: `: `
+ * inside one is a syntax error, ` #` silently truncates it, and a leading
+ * indicator turns it into something other than a string. Quoted scalars only
+ * need to be closed.
+ */
+function scalarProblem(value: string): string | null {
+  const v = value.trim();
+  if (v === "") return null;
+  if (v.startsWith("'")) {
+    return /^'(?:[^']|'')*'\s*(?:#.*)?$/.test(v) ? null : "single quote is not closed (write '' for a literal ')";
+  }
+  if (v.startsWith('"')) {
+    return /^"(?:[^"\\]|\\.)*"\s*(?:#.*)?$/.test(v) ? null : "double quote is not closed";
+  }
+  if (/^[[\]{},#&*!|>%@`]/.test(v) || /^[-?:](?:\s|$)/.test(v)) {
+    return `starts with \`${v[0]}\`, which YAML reads as syntax — quote the value`;
+  }
+  if (/:(?:\s|$)/.test(v)) return "contains `: ` — quote the value";
+  if (/\s#/.test(v)) return "` #` starts a comment and cuts the value short — quote the value";
+  return null;
+}
+
+/**
+ * Places where a SKILL.md frontmatter block is not valid YAML, as
+ * `line N: reason` strings (N counts from the opening `---`). Empty when sound.
+ *
+ * {@link frontmatter} reads leniently, and so does Claude Code, so a skill with
+ * broken YAML works here. Strict parsers (claude.ai upload, the Skills API,
+ * `skills-ref validate`, and other agents the store fans out to) reject it or
+ * read a different value. Still not a YAML parser: it covers the shapes skill
+ * frontmatter actually uses — top-level `key: value`, block scalars, plain
+ * continuation lines, and one level of nested `key: value` / `- item`.
+ */
+export function frontmatterProblems(text: string): string[] {
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== "---") return ["line 1: frontmatter must open with `---`"];
+  const end = lines.indexOf("---", 1);
+  if (end === -1) return ["frontmatter is never closed with `---`"];
+
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  // What indented lines after the current top-level key are.
+  let follow: "none" | "block" | "nested" | "continuation" = "none";
+  let quoted = "";
+  let quotedAt = 0;
+
+  for (let i = 1; i < end; i++) {
+    const line = lines[i]!;
+    const at = `line ${i + 1}`;
+    if (/^\s*(?:#.*)?$/.test(line)) continue;
+
+    if (/^\s/.test(line)) {
+      if (follow === "block") continue;
+      if (follow === "continuation") {
+        if (quoted !== "") quoted += ` ${line.trim()}`;
+        else {
+          const p = scalarProblem(line.trim());
+          if (p !== null) problems.push(`${at}: ${p}`);
+        }
+        continue;
+      }
+      if (follow === "nested") {
+        const kv = /^\s+(?:-\s+(.*)|-$|[A-Za-z0-9][\w.-]*:(?:\s+(.*))?$)/.exec(line);
+        if (kv === null) {
+          problems.push(`${at}: expected \`key: value\` or \`- item\` under the key above`);
+          continue;
+        }
+        const p = scalarProblem(kv[1] ?? kv[2] ?? "");
+        if (p !== null) problems.push(`${at}: ${p}`);
+        continue;
+      }
+      problems.push(`${at}: indented, but the key above already has a value on its line`);
+      continue;
+    }
+
+    if (quoted !== "") {
+      const p = scalarProblem(quoted);
+      if (p !== null) problems.push(`line ${quotedAt}: ${p}`);
+      quoted = "";
+    }
+
+    const kv = /^([A-Za-z][\w-]*):(?:\s+(.*))?$/.exec(line);
+    if (kv === null) {
+      problems.push(`${at}: not \`key: value\``);
+      follow = "none";
+      continue;
+    }
+    const [, key, raw = ""] = kv;
+    if (seen.has(key!)) problems.push(`${at}: \`${key}\` appears twice`);
+    seen.add(key!);
+
+    const value = raw.trim();
+    if (value === "") {
+      follow = "nested";
+    } else if (/^[|>][-+0-9]*\s*(?:#.*)?$/.test(value)) {
+      follow = "block";
+    } else {
+      follow = "continuation";
+      const opens = value[0] === "'" || value[0] === '"';
+      if (opens && scalarProblem(value) !== null) {
+        // A quoted scalar may span lines; judge it once it has all of them.
+        quoted = value;
+        quotedAt = i + 1;
+      } else if (opens) {
+        // Closed on its own line: nothing may continue it.
+        follow = "none";
+      } else {
+        const p = scalarProblem(value);
+        if (p !== null) problems.push(`${at}: ${p}`);
+      }
+    }
+  }
+  if (quoted !== "") {
+    const p = scalarProblem(quoted);
+    if (p !== null) problems.push(`line ${quotedAt}: ${p}`);
+  }
+  return problems;
+}
+
 /** Render an absolute path with `~` for readable output. */
 export function tilde(p: string): string {
   return p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p;
